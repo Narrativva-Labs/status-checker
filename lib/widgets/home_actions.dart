@@ -1,38 +1,41 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import '../services/discord_service.dart';
+import '../utils/status_utils.dart';
+import 'dialog_styles.dart';
 
 class HomeActions extends StatelessWidget {
-  final bool isLoggedIn;
   final Future<void> Function(String url, String? urlName) onAddUrl;
-  final Future<void> Function({String? discordWebhookUrl, bool? isAdmin}) onUpdateUserSettings;
-  final Future<String?> Function() onLoadDiscordWebhookUrl;
+  final String? currentWebhookUrl;
+  final Future<bool> Function(String? webhookUrl) onSaveDiscordWebhook;
 
   const HomeActions({
     super.key,
-    required this.isLoggedIn,
     required this.onAddUrl,
-    required this.onUpdateUserSettings,
-    required this.onLoadDiscordWebhookUrl,
+    required this.currentWebhookUrl,
+    required this.onSaveDiscordWebhook,
   });
+
+  static const Color _addColor = Color(0xFFBE1931);
+  static const Color _discordColor = Color(0xFF5865F2);
+
+  void _showMessage(BuildContext context, String text) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
 
   // ======= ADD PAGE DIALOG =======
   void _showAddPageDialog(BuildContext context) {
     final urlController = TextEditingController();
     final nameController = TextEditingController();
-    showDialog(
+
+    showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(
-            color: Colors.white.withOpacity(0.28),
-            width: 2.0,
-          ),
-        ),
+        shape: dialogShape(),
         elevation: 14,
-        backgroundColor: Theme.of(context).dialogBackgroundColor,
         titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
         title: Text(
           'Add Page',
@@ -45,27 +48,20 @@ class HomeActions extends StatelessWidget {
           children: [
             const SizedBox(height: 8),
             Text(
-              "Add a page for monitoring.",
+              'Add a page for monitoring.',
               style: GoogleFonts.inter(fontSize: 16, color: Colors.grey[600]),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 26),
             TextField(
               controller: nameController,
-              decoration: InputDecoration(
-                labelText: 'Page Name (optional)',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-              ),
+              decoration: dialogInputDecoration('Page Name (optional)'),
             ),
             const SizedBox(height: 22),
             TextField(
               controller: urlController,
-              decoration: InputDecoration(
-                labelText: 'Page URL',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-              ),
+              keyboardType: TextInputType.url,
+              decoration: dialogInputDecoration('Page URL'),
             ),
             const SizedBox(height: 10),
           ],
@@ -76,44 +72,25 @@ class HomeActions extends StatelessWidget {
             children: [
               Expanded(
                 child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.grey.shade300,
-                    foregroundColor: Colors.black87,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                  style: dialogButtonStyle(
+                    background: Colors.grey.shade300,
+                    foreground: Colors.black87,
                   ),
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
               ),
               const SizedBox(width: 18),
               Expanded(
                 child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFFbe1931),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  style: dialogButtonStyle(background: _addColor),
                   onPressed: () async {
-                    if (urlController.text.trim().isNotEmpty) {
-                      Navigator.of(dialogContext).pop();
-                      await onAddUrl(
-                        urlController.text.trim(),
-                        nameController.text.trim().isEmpty ? null : nameController.text.trim(),
-                      );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Page added.')),
-                        );
-                      }
-                    }
+                    final url = urlController.text.trim();
+                    if (url.isEmpty) return;
+                    final name = nameController.text.trim();
+                    Navigator.of(dialogContext).pop();
+                    // Feedback (success or the reason of failure) is shown by the caller.
+                    await onAddUrl(url, name.isEmpty ? null : name);
                   },
                   child: const Text('Add'),
                 ),
@@ -126,24 +103,15 @@ class HomeActions extends StatelessWidget {
   }
 
   // ======= DISCORD WEBHOOK DIALOG + VERIFICATION =======
-  void _showDiscordWebhookDialog(BuildContext context) async {
-    final String currentWebhook =
-        (await onLoadDiscordWebhookUrl()) ?? "";
+  void _showDiscordWebhookDialog(BuildContext context) {
+    final currentWebhook = currentWebhookUrl ?? '';
     final webhookController = TextEditingController(text: currentWebhook);
-    final discordService = DiscordService();
 
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(
-            color: Colors.white.withOpacity(0.28),
-            width: 2.0,
-          ),
-        ),
+        shape: dialogShape(),
         elevation: 14,
-        backgroundColor: Theme.of(context).dialogBackgroundColor,
         titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
         title: Text(
           'Discord Webhook URL',
@@ -153,11 +121,9 @@ class HomeActions extends StatelessWidget {
         contentPadding: const EdgeInsets.only(left: 28, right: 28, bottom: 8, top: 2),
         content: TextField(
           controller: webhookController,
-          decoration: InputDecoration(
-            labelText: 'Webhook URL',
-            hintText: 'Enter your Discord webhook URL',
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+          decoration: dialogInputDecoration(
+            'Webhook URL',
+            hint: 'https://discord.com/api/webhooks/…',
           ),
           keyboardType: TextInputType.url,
         ),
@@ -167,16 +133,11 @@ class HomeActions extends StatelessWidget {
             children: [
               Expanded(
                 child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.grey.shade300,
-                    foregroundColor: Colors.black87,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                  style: dialogButtonStyle(
+                    background: Colors.grey.shade300,
+                    foreground: Colors.black87,
                   ),
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
               ),
@@ -184,23 +145,13 @@ class HomeActions extends StatelessWidget {
               if (currentWebhook.isNotEmpty) ...[
                 Expanded(
                   child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.red.shade400,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
+                    style: dialogButtonStyle(background: Colors.red.shade400),
                     onPressed: () async {
                       Navigator.of(dialogContext).pop();
-                      await onUpdateUserSettings(discordWebhookUrl: null);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Webhook deleted')),
-                        );
-                      }
+                      final ok = await onSaveDiscordWebhook(null);
+                      if (!context.mounted) return;
+                      _showMessage(context,
+                          ok ? 'Webhook deleted.' : 'Could not delete the webhook.');
                     },
                     child: const Text('Delete'),
                   ),
@@ -209,69 +160,12 @@ class HomeActions extends StatelessWidget {
               ],
               Expanded(
                 child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF5865F2),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  style: dialogButtonStyle(background: _discordColor),
                   onPressed: () async {
                     final url = webhookController.text.trim();
                     Navigator.of(dialogContext).pop();
-                    if (url.isNotEmpty && url != currentWebhook) {
-                      final sent = await discordService.sendVerificationCode(url);
-                      if (!sent) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Failed to send verification code')),
-                          );
-                        }
-                        return;
-                      }
-
-                      final codeController = TextEditingController();
-                      final verified = await showDialog<bool>(
-                        context: context,
-                        builder: (verifyContext) => AlertDialog(
-                          title: const Text('Enter Verification Code'),
-                          content: TextField(
-                            controller: codeController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Code'),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(verifyContext).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                if (discordService.verifyCode(codeController.text.trim())) {
-                                  Navigator.of(verifyContext).pop(true);
-                                } else {
-                                  ScaffoldMessenger.of(verifyContext).showSnackBar(
-                                    const SnackBar(content: Text('Invalid code')),
-                                  );
-                                }
-                              },
-                              child: const Text('Verify'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (verified == true) {
-                        await onUpdateUserSettings(discordWebhookUrl: url);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Webhook saved')),
-                          );
-                        }
-                      }
-                    }
+                    if (url.isEmpty || url == currentWebhook) return;
+                    await _verifyAndSaveWebhook(context, url);
                   },
                   child: const Text('Verify & Save'),
                 ),
@@ -283,70 +177,121 @@ class HomeActions extends StatelessWidget {
     );
   }
 
+  /// Sends a one-time code to the webhook and saves the webhook only after the
+  /// user proves access to the Discord channel by entering the code.
+  Future<void> _verifyAndSaveWebhook(BuildContext context, String url) async {
+    if (!isDiscordWebhookUrl(url)) {
+      _showMessage(context, 'Enter a Discord webhook URL (https://discord.com/api/webhooks/…).');
+      return;
+    }
+
+    final discordService = DiscordService();
+    bool sent;
+    try {
+      sent = await discordService.sendVerificationCode(url);
+    } catch (_) {
+      sent = false;
+    }
+    if (!context.mounted) return;
+    if (!sent) {
+      _showMessage(context, 'Failed to send the verification code.');
+      return;
+    }
+
+    final codeController = TextEditingController();
+    final verified = await showDialog<bool>(
+      context: context,
+      builder: (verifyContext) => AlertDialog(
+        title: const Text('Enter Verification Code'),
+        content: TextField(
+          controller: codeController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Code',
+            helperText: 'We sent a 4-digit code to your Discord channel.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(verifyContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (discordService.verifyCode(codeController.text.trim())) {
+                Navigator.of(verifyContext).pop(true);
+              } else {
+                ScaffoldMessenger.of(verifyContext).showSnackBar(
+                  const SnackBar(content: Text('Invalid code')),
+                );
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+
+    if (verified != true) return;
+    final ok = await onSaveDiscordWebhook(url);
+    if (!context.mounted) return;
+    _showMessage(context, ok ? 'Webhook saved.' : 'Could not save the webhook.');
+  }
+
   @override
   Widget build(BuildContext context) {
+    final buttonStyle = FilledButton.styleFrom(
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+      textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
+
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            SelectableText(
-              "Narrativva Status",
-              style: GoogleFonts.epilogue(
-                fontSize: 40,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1.5,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(width: 12),
-            // OnlineDot sem!
-          ],
+        SelectableText(
+          'Narrativva Status',
+          style: GoogleFonts.epilogue(
+            fontSize: 40,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -1.5,
+          ),
+          textAlign: TextAlign.center,
         ),
         const SizedBox(height: 14),
         SelectableText(
-          "Live status and uptime monitoring for all Narrativva apps and websites.",
+          'Live status and uptime monitoring for all Narrativva apps and websites.',
           style: GoogleFonts.inter(
             fontSize: 17,
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.56),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.56),
             fontWeight: FontWeight.w500,
           ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 28),
-        if (isLoggedIn) ...[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FilledButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Add Page'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFbe1931),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
-                  textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => _showAddPageDialog(context),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 18,
+          runSpacing: 12,
+          children: [
+            FilledButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Add Page'),
+              style: buttonStyle.copyWith(
+                backgroundColor: const WidgetStatePropertyAll(_addColor),
               ),
-              const SizedBox(width: 18),
-              FilledButton.icon(
-                icon: const FaIcon(FontAwesomeIcons.discord, color: Colors.white, size: 20),
-                label: const Text('Set Discord'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF5865F2),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
-                  textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => _showDiscordWebhookDialog(context),
+              onPressed: () => _showAddPageDialog(context),
+            ),
+            FilledButton.icon(
+              icon: const FaIcon(FontAwesomeIcons.discord, color: Colors.white, size: 20),
+              label: const Text('Set Discord'),
+              style: buttonStyle.copyWith(
+                backgroundColor: const WidgetStatePropertyAll(_discordColor),
               ),
-            ],
-          ),
-        ],
+              onPressed: () => _showDiscordWebhookDialog(context),
+            ),
+          ],
+        ),
       ],
     );
   }

@@ -44,7 +44,7 @@ class _OnlineDotState extends State<OnlineDot> with SingleTickerProviderStateMix
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF34D399).withOpacity(0.6),
+                    color: const Color(0xFF34D399).withValues(alpha: 0.6),
                     blurRadius: 8 * _controller.value,
                     spreadRadius: 1.5 * _controller.value,
                   ),

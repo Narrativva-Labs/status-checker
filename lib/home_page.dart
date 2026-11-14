@@ -3,14 +3,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'models/url_entry.dart';
 import 'models/user_settings.dart';
-import 'services/supabase_service.dart';
 import 'services/discord_service.dart';
-import 'login_page.dart';
+import 'services/supabase_service.dart';
+import 'utils/status_utils.dart';
 import 'widgets/home_content.dart';
 import 'widgets/timezone_switch.dart';
 
 class HomePage extends StatefulWidget {
-  final void Function() onToggleTheme;
+  final VoidCallback onToggleTheme;
   final ThemeMode themeMode;
 
   const HomePage({
@@ -32,139 +32,133 @@ class _HomePageState extends State<HomePage> {
   List<UrlEntry> userPages = [];
   UserSettings? currentUserSettings;
   bool isLoading = true;
-  bool isLoggedIn = false;
-  String timezone = 'Europe/Prague';
+  String timezone = kTimezonePrague;
 
   @override
   void initState() {
     super.initState();
     _loadAllData();
+    // Close dialogs left open from the login page (e.g. after logging in
+    // through a magic link in another tab).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    });
   }
 
   Future<void> _loadAllData() async {
-    final user = supabase.auth.currentUser;
+    final results = await Future.wait([
+      supabaseService.loadPublicPages(),
+      supabaseService.loadUserPages(),
+      supabaseService.loadUserSettings(),
+    ]);
+    if (!mounted) return;
     setState(() {
-      isLoggedIn = user != null;
+      publicPages = results[0] as List<UrlEntry>;
+      userPages = results[1] as List<UrlEntry>;
+      currentUserSettings = results[2] as UserSettings?;
+      isLoading = false;
     });
-
-    try {
-      final publicEntries = await supabaseService.loadPublicPages();
-      List<UrlEntry> userEntries = [];
-      UserSettings? settings;
-      if (user != null) {
-        userEntries = await supabaseService.loadUserPages();
-        settings = await supabaseService.loadUserSettings();
-      }
-
-      setState(() {
-        publicPages = publicEntries;
-        userPages = userEntries;
-        currentUserSettings = settings;
-        isLoading = false;
-      });
-    } catch (e) {
-      print('Error loading data: $e');
-      setState(() {
-        isLoading = false;
-      });
-    }
   }
 
-  bool isValidUrl(String url) {
+  void _showMessage(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  /// Adds `https://` when the scheme is missing and validates the result.
+  /// Returns `null` for an invalid URL.
+  String? _normalizeUrl(String input) {
+    var url = input.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://$url';
+    }
     final uri = Uri.tryParse(url);
-    return uri != null && (uri.isScheme('http') || uri.isScheme('https')) && uri.host.isNotEmpty;
+    final valid = uri != null &&
+        (uri.isScheme('http') || uri.isScheme('https')) &&
+        uri.host.isNotEmpty;
+    return valid ? url : null;
   }
 
   Future<void> _addUserUrl(String url, String? urlName) async {
-    String finalUrl = url.trim();
-
-    if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
-      finalUrl = 'https://$finalUrl';
+    final finalUrl = _normalizeUrl(url);
+    if (finalUrl == null) {
+      _showMessage('The entered URL is not valid.');
+      return;
     }
-
-    if (!isValidUrl(finalUrl)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('The entered URL is not valid.')),
-        );
-      }
+    if (userPages.any((entry) => entry.url == finalUrl)) {
+      _showMessage('This page has already been added.');
+      return;
+    }
+    if (userPages.length >= kMaxPagesPerUser) {
+      _showMessage('You can monitor up to $kMaxPagesPerUser pages.');
       return;
     }
 
-    final exists = userPages.any((entry) => entry.url == finalUrl);
-    if (exists) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('This page has already been added.')),
-        );
-      }
+    final ok = await supabaseService.addUserPage(finalUrl, urlName: urlName?.trim());
+    if (!ok) {
+      _showMessage('Could not add the page. Please try again.');
       return;
     }
-
-    await supabaseService.addUserPage(finalUrl, urlName: urlName?.trim());
     await _loadAllData();
-    await _logToDiscord("**Page added:** ${urlName ?? finalUrl}");
+    _showMessage('Page added.');
+    await _logToDiscord('**Page added:** ${urlName ?? finalUrl}');
   }
 
   Future<void> _deleteUserUrl(String pageId) async {
-    final deleted = userPages.firstWhere(
-      (p) => p.id == pageId,
-      orElse: () => UrlEntry(
-        id: '',
-        url: '',
-        isPublic: false,
-        createdAt: DateTime.now(),
-      ),
-    );
-    await supabaseService.deleteUserPage(pageId);
+    final deleted = userPages.where((p) => p.id == pageId).firstOrNull;
+
+    final ok = await supabaseService.deleteUserPage(pageId);
+    if (!ok) {
+      _showMessage('Could not delete the page. Please try again.');
+      return;
+    }
     await _loadAllData();
-    await _logToDiscord("**Page deleted:** ${deleted.urlName ?? deleted.url}");
+    _showMessage('Page deleted.');
+    if (deleted != null) {
+      await _logToDiscord('**Page deleted:** ${deleted.displayName}');
+    }
   }
 
   Future<void> _editUserUrl(String pageId, String newUrl, String? newUrlName) async {
-    await supabaseService.updateUserPage(pageId, newUrl.trim(), newUrlName: newUrlName?.trim());
+    final finalUrl = _normalizeUrl(newUrl);
+    if (finalUrl == null) {
+      _showMessage('The entered URL is not valid.');
+      return;
+    }
+    if (userPages.any((entry) => entry.id != pageId && entry.url == finalUrl)) {
+      _showMessage('This page has already been added.');
+      return;
+    }
+
+    final ok = await supabaseService.updateUserPage(pageId, finalUrl,
+        newUrlName: newUrlName?.trim());
+    if (!ok) {
+      _showMessage('Could not update the page. Please try again.');
+      return;
+    }
     await _loadAllData();
-    await _logToDiscord("**Page updated:** ${newUrlName ?? newUrl}");
+    _showMessage('Page updated.');
+    await _logToDiscord('**Page updated:** ${newUrlName ?? finalUrl}');
   }
 
-  Future<void> _updateUserSettings({String? discordWebhookUrl, bool? isAdmin}) async {
-    await supabaseService.upsertUserSettings(
-      discordWebhookUrl: discordWebhookUrl,
-      isAdmin: isAdmin,
-    );
-    await _loadAllData();
-  }
-
-  Future<String?> _loadDiscordWebhookUrl() async {
-    final settings = await supabaseService.loadUserSettings();
-    return settings?.discordWebhookUrl;
+  Future<bool> _saveDiscordWebhook(String? webhookUrl) async {
+    final ok = await supabaseService.saveDiscordWebhook(webhookUrl);
+    if (ok) await _loadAllData();
+    return ok;
   }
 
   Future<void> _logToDiscord(String message) async {
     final webhook = currentUserSettings?.discordWebhookUrl;
-    if (webhook != null && webhook.trim().isNotEmpty) {
-      try {
-        await discordService.sendSimpleMessage(webhook, message);
-      } catch (e) {
-        print('Failed to send message to Discord: $e');
-      }
+    if (webhook == null || webhook.trim().isEmpty) return;
+    try {
+      await discordService.sendSimpleMessage(webhook, message);
+    } catch (e) {
+      debugPrint('Failed to send message to Discord: $e');
     }
   }
 
-  Future<void> _signOut() async {
-    await supabase.auth.signOut();
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => LoginPage(
-            onToggleTheme: widget.onToggleTheme,
-            themeMode: widget.themeMode,
-          ),
-        ),
-        (route) => false,
-      );
-    }
-  }
+  // AuthGate listens to auth changes and shows the login page after sign-out.
+  Future<void> _signOut() => supabase.auth.signOut();
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +169,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     return Scaffold(
-      // === ŽÁDNÝ APPBAR, jen horní řádek jako na loginu ===
+      // No AppBar, just a top row of controls (same as the login page).
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
         child: SafeArea(
@@ -187,6 +181,7 @@ class _HomePageState extends State<HomePage> {
                 TimezoneSwitchWidget(
                   selectedTimezone: timezone,
                   onChanged: (tz) => setState(() => timezone = tz),
+                  compact: MediaQuery.sizeOf(context).width <= 450,
                 ),
                 const SizedBox(width: 10),
                 IconButton(
@@ -197,27 +192,24 @@ class _HomePageState extends State<HomePage> {
                   onPressed: widget.onToggleTheme,
                   tooltip: 'Switch light/dark theme',
                 ),
-                if (isLoggedIn)
-                  IconButton(
-                    icon: const Icon(Icons.logout),
-                    tooltip: 'Logout',
-                    onPressed: _signOut,
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.logout),
+                  tooltip: 'Logout',
+                  onPressed: _signOut,
+                ),
               ],
             ),
           ),
         ),
       ),
       body: HomeContent(
-        isLoggedIn: isLoggedIn,
         publicPages: publicPages,
         userPages: userPages,
         onAddUrl: _addUserUrl,
         onDeleteUrl: _deleteUserUrl,
         onEditUrl: _editUserUrl,
-        currentUserSettings: currentUserSettings,
-        onUpdateUserSettings: _updateUserSettings,
-        onLoadDiscordWebhookUrl: _loadDiscordWebhookUrl,
+        currentWebhookUrl: currentUserSettings?.discordWebhookUrl,
+        onSaveDiscordWebhook: _saveDiscordWebhook,
         timezone: timezone,
       ),
     );

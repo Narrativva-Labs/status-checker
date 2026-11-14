@@ -16,7 +16,7 @@ class AppFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final textStyle = GoogleFonts.inter(
       fontSize: 14,
-      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
     );
 
     return Padding(
@@ -30,7 +30,7 @@ class AppFooter extends StatelessWidget {
               Divider(
                 height: 44,
                 thickness: 1,
-                color: Colors.grey.withOpacity(0.14),
+                color: Colors.grey.withValues(alpha: 0.14),
               ),
               const SizedBox(height: 24),
               Wrap(
@@ -54,7 +54,7 @@ class AppFooter extends StatelessWidget {
                   ),
                   TextButton(
                     onPressed: () => _openUrl('https://narrativva.com'),
-                    child: Text('\u00a9 2025 Narrativva', style: textStyle),
+                    child: Text('\u00a9 ${DateTime.now().year} Narrativva', style: textStyle),
                   ),
                 ],
               ),

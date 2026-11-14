@@ -3,7 +3,6 @@ class UrlEntry {
   final String? userId;
   final String url;
   final String? urlName;
-  final String? webhook;
   final bool isPublic;
   final DateTime createdAt;
 
@@ -12,10 +11,12 @@ class UrlEntry {
     this.userId,
     required this.url,
     this.urlName,
-    this.webhook,
     required this.isPublic,
     required this.createdAt,
   });
+
+  /// Display name: the custom name if set, otherwise the URL.
+  String get displayName => (urlName?.isNotEmpty ?? false) ? urlName! : url;
 
   factory UrlEntry.fromJson(Map<String, dynamic> json) {
     return UrlEntry(
@@ -23,8 +24,7 @@ class UrlEntry {
       userId: json['user_id'] as String?,
       url: json['url'] as String,
       urlName: json['url_name'] as String?,
-      webhook: json['webhook'] as String?,
-      isPublic: json['is_public'] as bool,
+      isPublic: (json['is_public'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -35,7 +35,6 @@ class UrlEntry {
       'user_id': userId,
       'url': url,
       'url_name': urlName,
-      'webhook': webhook,
       'is_public': isPublic,
       'created_at': createdAt.toIso8601String(),
     };

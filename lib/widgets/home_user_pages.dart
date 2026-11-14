@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../models/url_entry.dart';
+import 'dialog_styles.dart';
 import 'page_status_row.dart';
 
 class HomeUserPages extends StatelessWidget {
@@ -17,196 +19,142 @@ class HomeUserPages extends StatelessWidget {
     required this.timezone,
   });
 
-Future<void> _showEditDialog(BuildContext context, UrlEntry entry) async {
-  final TextEditingController editUrlController = TextEditingController(text: entry.url);
-  final TextEditingController editUrlNameController = TextEditingController(text: entry.urlName);
+  Future<void> _showEditDialog(BuildContext context, UrlEntry entry) async {
+    final editUrlController = TextEditingController(text: entry.url);
+    final editUrlNameController = TextEditingController(text: entry.urlName);
 
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (dialogContext) => AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: Colors.white.withOpacity(0.28),
-          width: 2.0,
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: dialogShape(),
+        elevation: 14,
+        titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
+        title: Text(
+          'Edit page',
+          style: GoogleFonts.epilogue(fontWeight: FontWeight.w700, fontSize: 24),
+          textAlign: TextAlign.center,
         ),
-      ),
-      elevation: 14,
-      backgroundColor: Theme.of(context).dialogBackgroundColor,
-      titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
-      title: Text(
-        'Edit page',
-        style: GoogleFonts.epilogue(fontWeight: FontWeight.w700, fontSize: 24),
-        textAlign: TextAlign.center,
-      ),
-      contentPadding: const EdgeInsets.only(left: 28, right: 28, bottom: 8, top: 2),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 8),
-          Text(
-            "Update the page URL or name.",
-            style: GoogleFonts.inter(fontSize: 16, color: Colors.grey[600]),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 26),
-          TextField(
-            controller: editUrlNameController,
-            decoration: InputDecoration(
-              labelText: 'Page Name (optional)',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-            ),
-          ),
-          const SizedBox(height: 22),
-          TextField(
-            controller: editUrlController,
-            decoration: InputDecoration(
-              labelText: 'Page URL',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-              contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-      ),
-      actionsPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      actions: [
-        Row(
+        contentPadding: const EdgeInsets.only(left: 28, right: 28, bottom: 8, top: 2),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.grey.shade300,
-                  foregroundColor: Colors.black87,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
-              ),
+            const SizedBox(height: 8),
+            Text(
+              'Update the page URL or name.',
+              style: GoogleFonts.inter(fontSize: 16, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () async {
-                  if (editUrlController.text.trim().isEmpty) return;
-                  Navigator.of(dialogContext).pop();
-                  await onEditUrl(
-                    entry.id,
-                    editUrlController.text.trim(),
-                    editUrlNameController.text.trim().isEmpty ? null : editUrlNameController.text.trim(),
-                  );
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Page updated.')),
-                    );
-                  }
-                },
-                child: const Text('Save'),
-              ),
+            const SizedBox(height: 26),
+            TextField(
+              controller: editUrlNameController,
+              decoration: dialogInputDecoration('Page Name (optional)'),
             ),
+            const SizedBox(height: 22),
+            TextField(
+              controller: editUrlController,
+              keyboardType: TextInputType.url,
+              decoration: dialogInputDecoration('Page URL'),
+            ),
+            const SizedBox(height: 10),
           ],
         ),
-      ],
-    ),
-  );
-}
-
-Future<void> _showDeleteConfirmDialog(BuildContext context, String pageId) async {
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(
-          color: Colors.white.withOpacity(0.28),
-          width: 2.0,
-        ),
-      ),
-      elevation: 14,
-      backgroundColor: Theme.of(context).dialogBackgroundColor,
-      titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
-      title: Text(
-        "Delete page?",
-        style: GoogleFonts.epilogue(fontWeight: FontWeight.w700, fontSize: 24),
-        textAlign: TextAlign.center,
-      ),
-      contentPadding: const EdgeInsets.only(left: 28, right: 28, bottom: 16, top: 2),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 8),
-          Text(
-            "Are you sure you want to delete this page? All logs and records for this page will also be deleted.",
-            style: GoogleFonts.inter(fontSize: 16, color: Colors.grey[600]),
-            textAlign: TextAlign.center,
+        actionsPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  style: dialogButtonStyle(
+                    background: Colors.grey.shade300,
+                    foreground: Colors.black87,
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: FilledButton(
+                  style: dialogButtonStyle(
+                    background: Theme.of(context).colorScheme.primary,
+                  ),
+                  onPressed: () async {
+                    final url = editUrlController.text.trim();
+                    if (url.isEmpty) return;
+                    final name = editUrlNameController.text.trim();
+                    Navigator.of(dialogContext).pop();
+                    // Feedback is shown by the caller.
+                    await onEditUrl(entry.id, url, name.isEmpty ? null : name);
+                  },
+                  child: const Text('Save'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
         ],
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-      actions: [
-        Row(
+    );
+  }
+
+  Future<void> _showDeleteConfirmDialog(BuildContext context, String pageId) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: dialogShape(),
+        elevation: 14,
+        titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
+        title: Text(
+          'Delete page?',
+          style: GoogleFonts.epilogue(fontWeight: FontWeight.w700, fontSize: 24),
+          textAlign: TextAlign.center,
+        ),
+        contentPadding: const EdgeInsets.only(left: 28, right: 28, bottom: 16, top: 2),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.grey.shade300,
-                  foregroundColor: Colors.black87,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
+            const SizedBox(height: 8),
+            Text(
+              'Are you sure you want to delete this page? '
+              'All logs and records for this page will also be deleted.',
+              style: GoogleFonts.inter(fontSize: 16, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(width: 18),
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  textStyle: GoogleFonts.epilogue(fontSize: 16, fontWeight: FontWeight.w600),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () async {
-                  Navigator.of(dialogContext).pop();
-                  await onDeleteUrl(pageId);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Page deleted.')),
-                    );
-                  }
-                },
-                child: const Text('Delete'),
-              ),
-            ),
+            const SizedBox(height: 16),
           ],
         ),
-      ],
-    ),
-  );
-}
+        actionsPadding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  style: dialogButtonStyle(
+                    background: Colors.grey.shade300,
+                    foreground: Colors.black87,
+                  ),
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: FilledButton(
+                  style: dialogButtonStyle(background: Colors.red),
+                  onPressed: () async {
+                    Navigator.of(dialogContext).pop();
+                    // Feedback is shown by the caller.
+                    await onDeleteUrl(pageId);
+                  },
+                  child: const Text('Delete'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -217,7 +165,7 @@ Future<void> _showDeleteConfirmDialog(BuildContext context, String pageId) async
           children: [
             const SizedBox(height: 38),
             Text(
-              "My Pages",
+              'My Pages',
               style: GoogleFonts.epilogue(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
@@ -234,6 +182,7 @@ Future<void> _showDeleteConfirmDialog(BuildContext context, String pageId) async
               ),
             ...userPages.map(
               (entry) => Padding(
+                key: ValueKey(entry.id),
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Card(
                   margin: EdgeInsets.zero,
@@ -241,7 +190,7 @@ Future<void> _showDeleteConfirmDialog(BuildContext context, String pageId) async
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
                     side: BorderSide(
-                      color: Colors.grey.withOpacity(0.22),
+                      color: Colors.grey.withValues(alpha: 0.22),
                       width: 1.2,
                     ),
                   ),
@@ -256,12 +205,12 @@ Future<void> _showDeleteConfirmDialog(BuildContext context, String pageId) async
                           children: [
                             IconButton(
                               icon: const Icon(Icons.edit),
-                              tooltip: "Edit",
+                              tooltip: 'Edit',
                               onPressed: () => _showEditDialog(context, entry),
                             ),
                             IconButton(
                               icon: const Icon(Icons.delete),
-                              tooltip: "Delete",
+                              tooltip: 'Delete',
                               onPressed: () => _showDeleteConfirmDialog(context, entry.id),
                             ),
                           ],
@@ -273,7 +222,7 @@ Future<void> _showDeleteConfirmDialog(BuildContext context, String pageId) async
               ),
             ),
             const SizedBox(height: 32),
-            Divider(height: 44, thickness: 1, color: Colors.grey.withOpacity(0.14)),
+            Divider(height: 44, thickness: 1, color: Colors.grey.withValues(alpha: 0.14)),
             const SizedBox(height: 12),
           ],
         ),

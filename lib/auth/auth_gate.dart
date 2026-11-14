@@ -4,8 +4,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../home_page.dart';
 import '../login_page.dart';
 
-class AuthGate extends StatefulWidget {
-  final void Function() onToggleTheme;
+/// Shows [HomePage] for a signed-in user and [LoginPage] otherwise.
+///
+/// Listens to auth changes, so signing in through a magic link or signing out
+/// switches the page without a reload or manual navigation.
+class AuthGate extends StatelessWidget {
+  final VoidCallback onToggleTheme;
   final ThemeMode themeMode;
 
   const AuthGate({
@@ -15,47 +19,27 @@ class AuthGate extends StatefulWidget {
   });
 
   @override
-  State<AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<AuthGate> {
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _handleInitialSession();
-  }
-
-  Future<void> _handleInitialSession() async {
-    try {
-      await Supabase.instance.client.auth.getSessionFromUrl(Uri.base);
-    } catch (e) {}
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    final auth = Supabase.instance.client.auth;
 
-    final session = Supabase.instance.client.auth.currentSession;
+    return StreamBuilder<AuthState>(
+      stream: auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final session = snapshot.data?.session ?? auth.currentSession;
 
-    if (session != null) {
-      return HomePage(
-        onToggleTheme: widget.onToggleTheme,
-        themeMode: widget.themeMode,
-      );
-    } else {
-      return LoginPage(
-        onToggleTheme: widget.onToggleTheme,
-        themeMode: widget.themeMode,
-      );
-    }
+        if (session != null) {
+          return HomePage(
+            // A new key per user resets the page state after re-login.
+            key: ValueKey(session.user.id),
+            onToggleTheme: onToggleTheme,
+            themeMode: themeMode,
+          );
+        }
+        return LoginPage(
+          onToggleTheme: onToggleTheme,
+          themeMode: themeMode,
+        );
+      },
+    );
   }
 }

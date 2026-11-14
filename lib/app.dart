@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flex_color_scheme/flex_color_scheme.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'auth/auth_gate.dart';
 
 class StatusCheckerApp extends StatefulWidget {
@@ -12,6 +13,8 @@ class StatusCheckerApp extends StatefulWidget {
 }
 
 class _StatusCheckerAppState extends State<StatusCheckerApp> {
+  static const _themeModeKey = 'themeMode';
+
   ThemeMode _themeMode = ThemeMode.system;
 
   @override
@@ -22,82 +25,57 @@ class _StatusCheckerAppState extends State<StatusCheckerApp> {
 
   Future<void> _loadThemeMode() async {
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString('themeMode');
-    if (stored != null) {
-      setState(() {
-        switch (stored) {
-          case 'light':
-            _themeMode = ThemeMode.light;
-            break;
-          case 'dark':
-            _themeMode = ThemeMode.dark;
-            break;
-          default:
-            _themeMode = ThemeMode.system;
-        }
-      });
-    }
+    final stored = prefs.getString(_themeModeKey);
+    if (stored == null || !mounted) return;
+    setState(() {
+      _themeMode = ThemeMode.values.firstWhere(
+        (mode) => mode.name == stored,
+        orElse: () => ThemeMode.system,
+      );
+    });
   }
 
-  // Přepínání světlo/tma
-  void _toggleTheme() async {
-    final brightness = WidgetsBinding.instance.window.platformBrightness;
-    ThemeMode newMode;
-    if (_themeMode == ThemeMode.system) {
-      newMode =
-          brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark;
-    } else {
-      newMode =
-          _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-    }
+  /// Toggles between light and dark mode and remembers the choice.
+  Future<void> _toggleTheme() async {
+    final isDarkNow = _themeMode == ThemeMode.system
+        ? WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
+        : _themeMode == ThemeMode.dark;
+    final newMode = isDarkNow ? ThemeMode.light : ThemeMode.dark;
+
     setState(() => _themeMode = newMode);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('themeMode', newMode.name);
+    await prefs.setString(_themeModeKey, newMode.name);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Globální ThemeData - moderní FlexColorScheme + Google Fonts
+    const subThemes = FlexSubThemesData(
+      cardRadius: 20,
+      elevatedButtonRadius: 16,
+      inputDecoratorRadius: 12,
+      defaultRadius: 16,
+    );
+
     return MaterialApp(
       title: 'Status Checker',
       debugShowCheckedModeBanner: false,
-      // Moderní světlý theme (Material 3, krásné barvy, radiusy, fonty)
       theme: FlexThemeData.light(
-        scheme: FlexScheme.hippieBlue, // Změň klidně na Aqua, Sakura apod.
+        scheme: FlexScheme.hippieBlue,
         fontFamily: GoogleFonts.inter().fontFamily,
-        textTheme: GoogleFonts.interTextTheme(),
-        useMaterial3: true,
-        subThemesData: const FlexSubThemesData(
-          cardRadius: 20,
-          elevatedButtonRadius: 16,
-          inputDecoratorRadius: 12,
-          defaultRadius: 16,
-          blendOnLevel: 12,
-        ),
+        subThemesData: subThemes.copyWith(blendOnLevel: 12),
       ).copyWith(
         textTheme: GoogleFonts.interTextTheme(),
         primaryTextTheme: GoogleFonts.epilogueTextTheme(),
       ),
-      // Moderní tmavý theme (stejná schéma)
       darkTheme: FlexThemeData.dark(
         scheme: FlexScheme.hippieBlue,
         fontFamily: GoogleFonts.inter().fontFamily,
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-        useMaterial3: true,
-        subThemesData: const FlexSubThemesData(
-          cardRadius: 20,
-          elevatedButtonRadius: 16,
-          inputDecoratorRadius: 12,
-          defaultRadius: 16,
-          blendOnLevel: 24,
-        ),
+        subThemesData: subThemes.copyWith(blendOnLevel: 24),
       ).copyWith(
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         primaryTextTheme: GoogleFonts.epilogueTextTheme(ThemeData.dark().textTheme),
       ),
-      // Výchozí mód (podle systému)
       themeMode: _themeMode,
-      // Home je AuthGate, dál předáváš theme přepínač a mode
       home: AuthGate(
         onToggleTheme: _toggleTheme,
         themeMode: _themeMode,
