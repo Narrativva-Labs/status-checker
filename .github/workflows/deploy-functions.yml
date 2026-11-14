@@ -53,4 +53,4 @@ jobs:
 
       - name: Deploy
         if: steps.config.outputs.ready == 'true'
-        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_ID" --use-api
+        run: supabase functions deploy --remote="$SUPABASE_PROJECT_ID" --use-api --yes

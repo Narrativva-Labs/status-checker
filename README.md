@@ -66,8 +66,8 @@ Supabase Edge Functions and outages can be reported to a Discord channel.
 2. Deploy the edge functions (or let GitHub Actions do it, see
    [Deployment](#3-deployment)) and set a secret that only the scheduler knows:
    ```sh
-   supabase functions deploy --project-ref <project-ref>
-   supabase secrets set CRON_SECRET=<random string> --project-ref <project-ref>
+   supabase functions deploy --remote=<project-ref>
+   supabase secrets set CRON_SECRET=<random string> --remote=<project-ref>
    ```
 3. Schedule both functions with `pg_cron` — see the commented block at the end
    of `schema.sql`.
