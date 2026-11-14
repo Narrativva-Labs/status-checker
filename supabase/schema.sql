@@ -155,7 +155,8 @@ grant update (user_id, discord_webhook_url) on public.user_settings to authentic
 --     headers := jsonb_build_object(
 --       'Authorization', 'Bearer <anon-key>',
 --       'x-cron-secret', '<cron-secret>'
---     )
+--     ),
+--     timeout_milliseconds := 30000
 --   );
 -- $$);
 --
@@ -166,6 +167,12 @@ grant update (user_id, discord_webhook_url) on public.user_settings to authentic
 --     headers := jsonb_build_object(
 --       'Authorization', 'Bearer <anon-key>',
 --       'x-cron-secret', '<cron-secret>'
---     )
+--     ),
+--     timeout_milliseconds := 30000
 --   );
+-- $$);
+--
+-- -- Keep logs (failed checks of unhealthy days) for 30 days.
+-- select cron.schedule('delete-old-logs', '0 3 * * *', $$
+--   delete from public.pages_logs where checked_at < now() - interval '30 days';
 -- $$);
