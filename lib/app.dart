@@ -57,7 +57,7 @@ class _StatusCheckerAppState extends State<StatusCheckerApp> {
     );
 
     return MaterialApp(
-      title: 'Status Checker',
+      title: 'Narrativva Status',
       debugShowCheckedModeBanner: false,
       theme: FlexThemeData.light(
         scheme: FlexScheme.hippieBlue,

@@ -13,7 +13,7 @@ class DiscordService {
     final response = await http.post(
       Uri.parse(webhookUrl),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'content': 'Your Narrativva Labs Status Checker verification code: **$code**'}),
+      body: jsonEncode({'content': 'Your Narrativva Status verification code: **$code**'}),
     );
 
     return response.statusCode == 204 || response.statusCode == 200;

@@ -1,11 +1,11 @@
 {
-    "name": "Narrativva Status Checker",
-    "short_name": "Status Checker",
+    "name": "Narrativva Status",
+    "short_name": "Status",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Monitor the uptime and health of your websites with Narrativva Status Checker",
+    "description": "Monitor the uptime and health of your websites with Narrativva Status",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

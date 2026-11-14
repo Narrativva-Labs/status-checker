@@ -1,21 +1,24 @@
 # Status Checker
 
 [![CI](https://github.com/Narrativva-Labs/status-checker/actions/workflows/ci.yml/badge.svg)](https://github.com/Narrativva-Labs/status-checker/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A Flutter web app 👀 that monitors the availability of websites and shows a
-30-day status history for each of them. Data lives in Supabase, checks run in
-Supabase Edge Functions and outages can be reported to a Discord channel.
-
-**Live:** [status.narrativva.com](https://status.narrativva.com)
+The open-source app behind **[Narrativva Status](https://status.narrativva.com)**:
+uptime monitoring for websites with a 30-day status history and Discord alerts,
+built with Flutter web, Supabase (Postgres, Auth, Edge Functions) and Netlify.
 
 ## Features
 
-- Public status page with a 30-day history per site, no account needed.
+- Public status page with the latest check and a 30-day history per site,
+  no account needed. The page refreshes itself every 5 minutes.
 - Passwordless login with a magic link (Supabase Auth).
-- Add, edit and delete your own URLs (up to 10 per user).
-- Discord alerts when a site goes down and when it is back up, with a
-  one-time code that proves you own the webhook.
-- Daily history in UTC or Prague time ⏰, light and dark mode 🌙.
+- Add, edit and delete your own URLs (up to 10 per user, enforced in the
+  database).
+- Discord alerts when a site goes down and when it is back up. Before a webhook
+  is saved, a one-time code is sent to the channel to confirm the URL works and
+  that you can read the channel. Adding, editing and deleting a page also posts
+  a short message there.
+- History in UTC or Prague time ⏰, light and dark mode 🌙.
 
 ## How it works
 
@@ -28,30 +31,35 @@ Supabase Edge Functions and outages can be reported to a Discord channel.
                                └──────────── Flutter web app ◀────────────────┘
 ```
 
-1. **`supabase/functions/status-checker/index.ts`** runs every 5 minutes. Pages of
-   admin users are checked every 5 minutes, all others every 15 minutes. A
-   check fails on a network error, a timeout (10 s) or an HTTP status ≥ 400.
-   Every result is stored in `pages_logs`, and the owner gets a Discord
-   message when the state of a page changes.
-2. **`supabase/functions/update_daily_status/index.ts`** runs once a day after
-   midnight UTC. It turns yesterday's logs into one `page_daily_status` row per
-   page for both UTC and Europe/Prague: **green** (no failed checks),
-   **orange** (some), **red** (12 or more failed checks) or **grey** (no data).
-   Logs of a fully healthy day are deleted to keep the table small.
-3. **The Flutter app** shows the daily records, and computes today's status
-   from the raw logs with the same rules (`lib/utils/status_utils.dart`).
+1. **`status-checker`** runs every 5 minutes. Pages of admin users are checked
+   every 5 minutes, all others every 15 minutes. A check fails on a network
+   error, a timeout (10 s) or an HTTP status ≥ 400; redirects are followed hop
+   by hop, and every hop must be a public address. Each result is stored in
+   `pages_logs`. When a page changes state, its owner gets a Discord message
+   (with up to three delivery attempts that respect `Retry-After`).
+2. **`update_daily_status`** runs once a day. It turns the logs of the last
+   three closed days into one `page_daily_status` row per page and day, for
+   both UTC and Europe/Prague: **green** (no failed checks), **orange**
+   (some), **red** (12 or more) or **grey** (no data). Re-running it is safe,
+   and a run missed within the last three days is caught up. Logs of a fully healthy day are
+   deleted once both time zones have aggregated it.
+3. **The Flutter app** shows the daily records, today's status computed from
+   the raw logs with the same rules, and the result of the latest check.
+
+The status rules exist twice, in Dart for the app and in TypeScript for the
+functions, and both are covered by unit tests.
 
 ## Project structure
 
 | Path | Contents |
 |---|---|
-| `lib/` | Flutter app: pages, widgets, Supabase and Discord services |
-| `lib/utils/status_utils.dart` | Time zone and status rules (unit tested) |
-| `test/` | Unit tests |
+| `lib/` | Flutter app: pages, widgets, models, Supabase and Discord services |
+| `lib/utils/status_utils.dart` | Time zone and status rules of the app |
+| `test/` | Unit tests of the rules and widget tests of the status bar |
+| `supabase/functions/` | Edge functions; shared rules and their tests in `_shared/` |
 | `supabase/schema.sql` | Tables, Row Level Security, page limit and cron jobs |
-| `supabase/functions/` | Edge functions for the checks and the daily summary |
 | `supabase/config.toml` | Supabase CLI settings for deploying the functions |
-| `.github/workflows/` | CI (analyze, test, build) and edge function deploy |
+| `.github/workflows/` | CI (analyze, tests, build) and the edge function deploy |
 | `web/` | `index.html` with SEO tags, static `about.html`, icons |
 | `netlify_build.sh`, `netlify.toml` | Netlify build and redirects |
 
@@ -63,20 +71,26 @@ Supabase Edge Functions and outages can be reported to a Discord channel.
    in the SQL editor. It creates the tables with Row Level Security, so the
    public anon key used by the app can only read public pages and the
    signed-in user's own data.
-2. Deploy the edge functions (or let GitHub Actions do it, see
-   [Deployment](#3-deployment)) and set a secret that only the scheduler knows:
+2. Deploy the edge functions, or let GitHub Actions do it (see
+   [Deployment](#3-deployment)):
    ```sh
    supabase functions deploy --remote=<project-ref>
+   ```
+3. Schedule both functions with `pg_cron`, see the commented block at the end
+   of `schema.sql`.
+4. Optional: restrict who can run the functions. Set a secret and send the
+   same value in the `x-cron-secret` header from **both** cron jobs; once the
+   secret is set, requests without it are rejected.
+   ```sh
    supabase secrets set CRON_SECRET=<random string> --remote=<project-ref>
    ```
-3. Schedule both functions with `pg_cron` — see the commented block at the end
-   of `schema.sql`.
-4. To make a user an admin (5-minute checks), set `is_admin = true` in
+5. To make a user an admin (5-minute checks), set `is_admin = true` in
    `user_settings`. Public pages are marked with `is_public = true` in `pages`.
 
 ### 2. App
 
-Requirements: Flutter 3.27 or newer (CI and Netlify use 3.47.9).
+Requirements: Flutter 3.27 or newer (CI and Netlify use 3.47.9) and, for the
+function tests, Deno 2.
 
 Create a `.env` file:
 
@@ -90,8 +104,9 @@ Then run `make chrome`. It passes the variables to Flutter as `--dart-define`
 values and opens the app on port 5000.
 
 ```sh
-flutter analyze   # static analysis
-flutter test      # unit tests
+flutter analyze                  # static analysis
+flutter test                     # Dart unit and widget tests
+deno test supabase/functions     # edge function tests
 ```
 
 ### 3. Deployment
@@ -113,6 +128,16 @@ Flutter app.
 
 Without them the workflow is skipped. It can also be started by hand from the
 Actions tab.
+
+## Known limitations
+
+- The SSRF guard checks host names and IP literals, not DNS records, so a
+  public domain that resolves to a private address is not blocked; the
+  hosting runtime is relied on not to reach private networks.
+- A Discord alert that still fails after three attempts is logged, not
+  queued for later.
+- The status is sampled every 5 or 15 minutes, so a shorter outage between
+  two checks is not seen.
 
 ## License
 
