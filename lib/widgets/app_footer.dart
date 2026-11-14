@@ -49,7 +49,7 @@ class AppFooter extends StatelessWidget {
                     child: Text('About', style: textStyle),
                   ),
                   TextButton(
-                    onPressed: () => _openUrl('https://labs.narrativva.com'),
+                    onPressed: () => _openUrl('https://github.com/Narrativva-Labs'),
                     child: Text('Built by Narrativva Labs', style: textStyle),
                   ),
                   TextButton(

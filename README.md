@@ -145,4 +145,4 @@ Actions tab.
 
 ---
 
-Created as part of the [Narrativva Labs project](https://labs.narrativva.com).
+Created as part of the [Narrativva Labs project](https://github.com/Narrativva-Labs).

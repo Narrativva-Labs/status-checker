@@ -46,6 +46,10 @@ jobs:
         if: steps.config.outputs.ready == 'true'
         run: deno check supabase/functions/*/index.ts
 
+      - name: Test
+        if: steps.config.outputs.ready == 'true'
+        run: deno test supabase/functions
+
       - uses: supabase/setup-cli@v1
         if: steps.config.outputs.ready == 'true'
         with:
