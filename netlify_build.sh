@@ -6,13 +6,18 @@ set -euo pipefail
 # Pinned, so a new Flutter release cannot break the deploy unexpectedly.
 FLUTTER_VERSION="${FLUTTER_VERSION:-3.47.9}"
 
-if ! command -v flutter &> /dev/null; then
+installed_version=""
+if command -v flutter &> /dev/null; then
+  installed_version="$(flutter --version | awk '$1 == "Flutter" {print $2}')"
+fi
+
+if [[ "$installed_version" != "$FLUTTER_VERSION" ]]; then
   echo "Installing Flutter SDK ${FLUTTER_VERSION}…"
   rm -rf flutter
   git clone --depth 1 --branch "${FLUTTER_VERSION}" https://github.com/flutter/flutter.git
-  export PATH="$PATH:$(pwd)/flutter/bin"
+  export PATH="$(pwd)/flutter/bin:$PATH"
 else
-  echo "Flutter already installed: $(flutter --version | head -1)"
+  echo "Flutter already installed: $installed_version"
 fi
 
 flutter precache --web
