@@ -24,7 +24,7 @@ jobs:
       - run: flutter build web --release --dart-define=SUPABASE_URL=https://example.supabase.co --dart-define=SUPABASE_ANON_KEY=ci
 
   edge-functions:
-    name: Type-check edge functions
+    name: Check and test edge functions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,3 +32,4 @@ jobs:
         with:
           deno-version: v2.x
       - run: deno check supabase/functions/status-checker/index.ts supabase/functions/update_daily_status/index.ts
+      - run: deno test supabase/functions
