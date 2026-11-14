@@ -1,6 +1,6 @@
 // Shared, side-effect free helpers for time zones and status evaluation.
 //
-// The same rules are implemented in `supabase/functions/update_daily_status/index.ts`,
+// The same rules are implemented in `supabase/functions/_shared/status.ts`,
 // so the "today" bar computed in the app matches the daily records written by
 // the edge function.
 
@@ -60,6 +60,13 @@ DateTime midnightUtc(int year, int month, int day, String timezone) {
   return wallMidnight.subtract(offset);
 }
 
+/// Parses a database timestamp as UTC. `timestamp without time zone` values
+/// come without an offset and would otherwise be read as local time.
+DateTime parseUtc(String value) {
+  final hasOffset = RegExp(r'(Z|[+-]\d{2}(:?\d{2})?)$').hasMatch(value);
+  return DateTime.parse(hasOffset ? value : '${value}Z').toUtc();
+}
+
 /// `YYYY-MM-DD` key of a wall-clock date.
 String dayKey(DateTime wall) =>
     '${wall.year.toString().padLeft(4, '0')}-'
@@ -95,6 +102,7 @@ bool isDiscordWebhookUrl(String url) {
   final uri = Uri.tryParse(url);
   return uri != null &&
       uri.isScheme('https') &&
+      !uri.hasPort &&
       RegExp(r'^((ptb|canary)\.)?discord(app)?\.com$').hasMatch(uri.host) &&
-      uri.path.startsWith('/api/webhooks/');
+      RegExp(r'^/api/webhooks/\d+/[A-Za-z0-9_-]+/?$').hasMatch(uri.path);
 }

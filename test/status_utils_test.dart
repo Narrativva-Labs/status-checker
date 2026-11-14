@@ -78,6 +78,17 @@ void main() {
     });
   });
 
+  group('parseUtc', () {
+    test('reads timestamps without an offset as UTC', () {
+      expect(parseUtc('2026-11-14T18:30:00.123'), DateTime.utc(2026, 11, 14, 18, 30, 0, 123));
+    });
+
+    test('respects an explicit offset', () {
+      expect(parseUtc('2026-11-14T19:30:00+01:00'), DateTime.utc(2026, 11, 14, 18, 30));
+      expect(parseUtc('2026-11-14T18:30:00Z'), DateTime.utc(2026, 11, 14, 18, 30));
+    });
+  });
+
   group('isDiscordWebhookUrl', () {
     test('accepts Discord webhook endpoints', () {
       expect(isDiscordWebhookUrl('https://discord.com/api/webhooks/1/abc'), isTrue);

@@ -18,17 +18,10 @@ class HomePublicPages extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 700),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: publicPages
-            .map(
-              (entry) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 0),
-                child: PageStatusRowWidget(
-                  page: entry,
-                  timezone: timezone,
-                ),
-              ),
-            )
-            .toList(),
+        children: [
+          for (final entry in publicPages)
+            PageStatusRowWidget(key: ValueKey(entry.id), page: entry, timezone: timezone),
+        ],
       ),
     );
   }

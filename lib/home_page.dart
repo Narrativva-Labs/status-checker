@@ -7,6 +7,7 @@ import 'services/discord_service.dart';
 import 'services/supabase_service.dart';
 import 'utils/status_utils.dart';
 import 'widgets/home_content.dart';
+import 'widgets/load_error.dart';
 import 'widgets/timezone_switch.dart';
 
 class HomePage extends StatefulWidget {
@@ -32,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   List<UrlEntry> userPages = [];
   UserSettings? currentUserSettings;
   bool isLoading = true;
+  bool loadFailed = false;
   String timezone = kTimezonePrague;
 
   @override
@@ -46,18 +48,41 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadAllData() async {
-    final results = await Future.wait([
-      supabaseService.loadPublicPages(),
-      supabaseService.loadUserPages(),
-      supabaseService.loadUserSettings(),
-    ]);
-    if (!mounted) return;
+    try {
+      final results = await Future.wait([
+        supabaseService.loadPublicPages(),
+        supabaseService.loadUserPages(),
+        supabaseService.loadUserSettings(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        publicPages = results[0] as List<UrlEntry>;
+        userPages = results[1] as List<UrlEntry>;
+        currentUserSettings = results[2] as UserSettings?;
+        isLoading = false;
+        loadFailed = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading data: $e');
+      if (!mounted) return;
+      if (isLoading) {
+        setState(() {
+          isLoading = false;
+          loadFailed = true;
+        });
+      } else {
+        // Keep the data on screen when only a refresh failed.
+        _showMessage('Could not refresh the data.');
+      }
+    }
+  }
+
+  void _retryLoad() {
     setState(() {
-      publicPages = results[0] as List<UrlEntry>;
-      userPages = results[1] as List<UrlEntry>;
-      currentUserSettings = results[2] as UserSettings?;
-      isLoading = false;
+      isLoading = true;
+      loadFailed = false;
     });
+    _loadAllData();
   }
 
   void _showMessage(String text) {
@@ -165,6 +190,13 @@ class _HomePageState extends State<HomePage> {
     if (isLoading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (loadFailed) {
+      return Scaffold(
+        body: Center(
+          child: LoadError(message: 'Could not load your pages.', onRetry: _retryLoad),
+        ),
       );
     }
 

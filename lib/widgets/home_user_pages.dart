@@ -23,8 +23,9 @@ class HomeUserPages extends StatelessWidget {
     final editUrlController = TextEditingController(text: entry.url);
     final editUrlNameController = TextEditingController(text: entry.urlName);
 
-    await showDialog<void>(
-      context: context,
+    await showDialogDisposing<void>(
+      context,
+      disposables: [editUrlController, editUrlNameController],
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
         shape: dialogShape(),

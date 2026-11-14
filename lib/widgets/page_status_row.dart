@@ -8,22 +8,36 @@ import '../models/page_status.dart';
 import '../models/url_entry.dart';
 import '../services/supabase_service.dart';
 import '../utils/status_utils.dart';
+import 'load_error.dart';
 
-/// Name, URL and a 30-day status bar of one monitored page.
+/// Name, URL, latest check and a 30-day status bar of one monitored page.
 class PageStatusRowWidget extends StatefulWidget {
   final UrlEntry page;
   final String timezone;
 
-  const PageStatusRowWidget({super.key, required this.page, required this.timezone});
+  /// Data source; replaceable in tests.
+  final SupabaseService? service;
+
+  const PageStatusRowWidget({
+    super.key,
+    required this.page,
+    required this.timezone,
+    this.service,
+  });
 
   @override
   State<PageStatusRowWidget> createState() => _PageStatusRowWidgetState();
 }
 
 class _PageStatusRowWidgetState extends State<PageStatusRowWidget> {
-  final SupabaseService _supabaseService = SupabaseService();
-  late Future<(List<PageStatus>, PageStatus?)> _statuses;
+  late final SupabaseService _service = widget.service ?? SupabaseService();
   Timer? _refreshTimer;
+
+  PageStatusData? _data;
+  bool _failed = false;
+
+  /// Increases with every request, so only the newest response is applied.
+  int _requestId = 0;
 
   /// Checks run every 5 minutes, so the bar refreshes at the same pace.
   static const _refreshInterval = Duration(minutes: 5);
@@ -31,26 +45,8 @@ class _PageStatusRowWidgetState extends State<PageStatusRowWidget> {
   @override
   void initState() {
     super.initState();
-    _statuses = _load();
-    _refreshTimer = Timer.periodic(_refreshInterval, (_) => _refresh());
-  }
-
-  @override
-  void dispose() {
-    _refreshTimer?.cancel();
-    super.dispose();
-  }
-
-  /// Reloads in the background and swaps the data in when it arrives, so the
-  /// bar does not flash a loading spinner.
-  Future<void> _refresh() async {
-    final pageId = widget.page.id;
-    final timezone = widget.timezone;
-    final next = _load();
-    await next;
-    // Ignore the result if the page or time zone changed in the meantime.
-    if (!mounted || pageId != widget.page.id || timezone != widget.timezone) return;
-    setState(() => _statuses = next);
+    _load();
+    _refreshTimer = Timer.periodic(_refreshInterval, (_) => _load());
   }
 
   @override
@@ -60,121 +56,180 @@ class _PageStatusRowWidgetState extends State<PageStatusRowWidget> {
     if (oldWidget.page.id != widget.page.id ||
         oldWidget.page.url != widget.page.url ||
         oldWidget.timezone != widget.timezone) {
-      _statuses = _load();
+      _load();
     }
   }
 
-  Future<(List<PageStatus>, PageStatus?)> _load() async {
-    final daily = _supabaseService.loadPageDailyStatuses(widget.page.id,
-        timezone: widget.timezone);
-    final latest = _supabaseService.loadPageLatestStatus(widget.page.id,
-        timezone: widget.timezone);
-    return (await daily, await latest);
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final requestId = ++_requestId;
+    try {
+      final data = await _service.loadPageStatus(widget.page.id, timezone: widget.timezone);
+      if (!mounted || requestId != _requestId) return;
+      setState(() {
+        _data = data;
+        _failed = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading statuses of ${widget.page.url}: $e');
+      if (!mounted || requestId != _requestId) return;
+      // A failed background refresh keeps the last data on screen.
+      setState(() => _failed = true);
+    }
+  }
+
+  void _retry() {
+    setState(() => _failed = false);
+    _load();
   }
 
   @override
   Widget build(BuildContext context) {
     final mutedColor = Theme.of(context).colorScheme.onSurface;
+    // Data of another page or time zone (still loading after a change) is not
+    // shown, otherwise it would appear under the wrong name or dates.
+    final current = _data;
+    final data = current != null &&
+            current.pageId == widget.page.id &&
+            current.timezone == widget.timezone
+        ? current
+        : null;
 
-    return FutureBuilder<(List<PageStatus>, PageStatus?)>(
-      future: _statuses,
-      builder: (context, snapshot) {
-        // While refreshing, FutureBuilder keeps the previous data, so the
-        // spinner is shown only on the first load.
-        if (!snapshot.hasData) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 22),
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          return const Text('Error loading statuses.');
-        }
-
-        final (statuses, latestStatus) = snapshot.data!;
-        final statusByDay = {for (final s in statuses) s.day: s.status};
-
-        // Days are taken in the selected time zone, so they match the records.
-        final days = lastDayKeys(DateTime.now(), widget.timezone);
-        final today = days.last;
-        final ovals = [
-          for (final day in days)
-            (
-              day == today
-                  ? (latestStatus?.status ?? DayStatus.grey)
-                  : (statusByDay[day] ?? DayStatus.grey),
-              day,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 22),
+      child: Column(
+        children: [
+          SelectableText(
+            widget.page.displayName,
+            style: GoogleFonts.epilogue(
+              fontWeight: FontWeight.w700,
+              fontSize: 21,
+              letterSpacing: -0.5,
             ),
-        ];
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 22),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              SelectableText(
-                widget.page.displayName,
-                style: GoogleFonts.epilogue(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 21,
-                  letterSpacing: -0.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 2),
-              SelectableText(
-                widget.page.url,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: mutedColor.withValues(alpha: 0.45),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 14),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  // Fit all 30 days into the available width (16 px side
-                  // padding, 2.6 px gap per oval), up to 15 px per oval.
-                  const gap = 2.6;
-                  final available = constraints.maxWidth - 32;
-                  final ovalWidth = (available / ovals.length - gap).clamp(3.0, 15.0);
-                  final isNarrow = ovalWidth < 15.0;
-                  final ovalHeight = isNarrow ? 22.0 : 28.0;
-
-                  final row = Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      for (final (status, day) in ovals)
-                        _StatusOval(
-                          status: status,
-                          day: day,
-                          width: ovalWidth,
-                          height: ovalHeight,
-                        ),
-                    ],
-                  );
-
-                  if (!isNarrow) return row;
-
-                  return Column(
-                    children: [
-                      row,
-                      const SizedBox(height: 4),
-                      Text(
-                        'Last 30 days',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: mutedColor.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
+            textAlign: TextAlign.center,
           ),
+          const SizedBox(height: 2),
+          SelectableText(
+            widget.page.url,
+            style: GoogleFonts.inter(fontSize: 12, color: mutedColor.withValues(alpha: 0.45)),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 14),
+          if (data != null) ...[
+            _StatusBar(data: data, mutedColor: mutedColor),
+            if (data.lastCheck != null) ...[
+              const SizedBox(height: 8),
+              _LastCheckLabel(check: data.lastCheck!, timezone: widget.timezone),
+            ],
+          ] else if (_failed)
+            LoadError(message: 'Could not load the status.', onRetry: _retry)
+          else
+            const SizedBox(
+              height: 28,
+              child: Center(
+                child: SizedBox.square(
+                  dimension: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusBar extends StatelessWidget {
+  final PageStatusData data;
+  final Color mutedColor;
+
+  const _StatusBar({required this.data, required this.mutedColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final statusByDay = {for (final s in data.daily) s.day: s.status};
+    // Days are taken in the selected time zone, so they match the records.
+    final days = lastDayKeys(DateTime.now(), data.timezone);
+    final today = days.last;
+    final ovals = [
+      for (final day in days)
+        (
+          day == today && data.today.day == today
+              ? data.today.status
+              : (statusByDay[day] ?? DayStatus.grey),
+          day,
+        ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Fit all 30 days into the available width (16 px side padding,
+        // 2.6 px gap per oval), up to 15 px per oval.
+        const gap = 2.6;
+        final available = constraints.maxWidth - 32;
+        final ovalWidth = (available / ovals.length - gap).clamp(3.0, 15.0);
+        final isNarrow = ovalWidth < 15.0;
+        final ovalHeight = isNarrow ? 22.0 : 28.0;
+
+        final row = Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final (status, day) in ovals)
+              _StatusOval(status: status, day: day, width: ovalWidth, height: ovalHeight),
+          ],
+        );
+
+        if (!isNarrow) return row;
+
+        return Column(
+          children: [
+            row,
+            const SizedBox(height: 4),
+            Text(
+              'Last 30 days',
+              style: GoogleFonts.inter(fontSize: 12, color: mutedColor.withValues(alpha: 0.6)),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+/// "Up · checked 18:30" from the most recent check.
+class _LastCheckLabel extends StatelessWidget {
+  final LastCheck check;
+  final String timezone;
+
+  const _LastCheckLabel({required this.check, required this.timezone});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = check.failed ? _StatusOvalState._colors[DayStatus.red]! : _StatusOvalState._colors[DayStatus.green]!;
+    final time = DateFormat('HH:mm').format(wallClock(check.checkedAt, timezone));
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          '${check.failed ? 'Down' : 'Up'} · checked $time',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -199,7 +254,7 @@ class _StatusOval extends StatefulWidget {
 class _StatusOvalState extends State<_StatusOval> {
   bool _hovered = false;
 
-  static const _colors = {
+  static const Map<String, Color> _colors = {
     DayStatus.green: Color(0xFF34D399),
     DayStatus.orange: Color(0xFFF59E42),
     DayStatus.red: Color(0xFFEF4444),

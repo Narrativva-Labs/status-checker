@@ -7,6 +7,7 @@ import 'services/supabase_service.dart';
 import 'utils/status_utils.dart';
 import 'widgets/app_footer.dart';
 import 'widgets/dialog_styles.dart';
+import 'widgets/load_error.dart';
 import 'widgets/online_dot.dart';
 import 'widgets/page_status_row.dart';
 import 'widgets/timezone_switch.dart';
@@ -31,10 +32,10 @@ class _LoginPageState extends State<LoginPage> {
   final MagicLinkService magicLinkService = MagicLinkService();
   // Owned by the login dialog (created when it opens, disposed when it closes),
   // so it stays valid even if this page is replaced while the dialog is open.
-  TextEditingController emailController = TextEditingController();
+  late TextEditingController emailController;
 
   // Loaded once; switching the time zone must not refetch the list.
-  late final Future<List<UrlEntry>> _publicPages = supabaseService.loadPublicPages();
+  late Future<List<UrlEntry>> _publicPages = supabaseService.loadPublicPages();
 
   String timezone = kTimezonePrague;
   bool isLoading = false;
@@ -74,8 +75,9 @@ class _LoginPageState extends State<LoginPage> {
     _dialogOpen = true;
     _dialogId++;
     final controller = emailController = TextEditingController();
-    showDialog<void>(
-      context: context,
+    showDialogDisposing<void>(
+      context,
+      disposables: [controller],
       builder: (context) => StatefulBuilder(
         builder: (context, dialogSetState) {
           return AlertDialog(
@@ -99,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 18),
                   TextField(
-                    controller: emailController,
+                    controller: controller,
                     decoration: InputDecoration(
                       labelText: 'Email',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -153,10 +155,7 @@ class _LoginPageState extends State<LoginPage> {
           );
         },
       ),
-    ).whenComplete(() {
-      _dialogOpen = false;
-      controller.dispose();
-    });
+    ).whenComplete(() => _dialogOpen = false);
   }
 
   @override
@@ -226,7 +225,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      const OnlineDot(),
+                      const Tooltip(
+                        message: 'Live data, refreshed every 5 minutes',
+                        child: OnlineDot(),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 18),
@@ -254,6 +256,17 @@ class _LoginPageState extends State<LoginPage> {
                     return const Padding(
                       padding: EdgeInsets.only(top: 40.0),
                       child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  if (snapshot.hasError) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 40.0),
+                      child: LoadError(
+                        message: 'Could not load the status page.',
+                        onRetry: () => setState(
+                          () => _publicPages = supabaseService.loadPublicPages(),
+                        ),
+                      ),
                     );
                   }
                   final publicPages = snapshot.data ?? const <UrlEntry>[];

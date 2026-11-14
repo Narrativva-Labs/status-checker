@@ -31,8 +31,9 @@ class HomeActions extends StatelessWidget {
     final urlController = TextEditingController();
     final nameController = TextEditingController();
 
-    showDialog<void>(
-      context: context,
+    showDialogDisposing<void>(
+      context,
+      disposables: [urlController, nameController],
       builder: (dialogContext) => AlertDialog(
         shape: dialogShape(),
         elevation: 14,
@@ -107,8 +108,9 @@ class HomeActions extends StatelessWidget {
     final currentWebhook = currentWebhookUrl ?? '';
     final webhookController = TextEditingController(text: currentWebhook);
 
-    showDialog<void>(
-      context: context,
+    showDialogDisposing<void>(
+      context,
+      disposables: [webhookController],
       builder: (dialogContext) => AlertDialog(
         shape: dialogShape(),
         elevation: 14,
@@ -199,8 +201,9 @@ class HomeActions extends StatelessWidget {
     }
 
     final codeController = TextEditingController();
-    final verified = await showDialog<bool>(
-      context: context,
+    final verified = await showDialogDisposing<bool>(
+      context,
+      disposables: [codeController],
       builder: (verifyContext) => AlertDialog(
         title: const Text('Enter Verification Code'),
         content: TextField(

@@ -1,4 +1,3 @@
-// lib/services/supabase_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -7,197 +6,164 @@ import '../models/url_entry.dart';
 import '../models/user_settings.dart';
 import '../utils/status_utils.dart';
 
+/// Data access for the app.
+///
+/// Read methods throw when the request fails, so the UI can tell
+/// "no data" apart from "data could not be loaded". Write methods return
+/// `true` on success and `false` on failure.
 class SupabaseService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  SupabaseClient get _supabase => Supabase.instance.client;
 
   // --- PAGES ---
 
-  /// Loads public (shared) pages.
+  /// Public pages shown on the status page.
   Future<List<UrlEntry>> loadPublicPages() async {
-    try {
-      final List<dynamic> result = await _supabase
-          .from('pages')
-          .select('*')
-          .eq('is_public', true)
-          .order('created_at');
-      return result
-          .map((json) => UrlEntry.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      debugPrint('Error loading public pages: $e');
-      return [];
-    }
+    final List<dynamic> result =
+        await _supabase.from('pages').select('*').eq('is_public', true).order('created_at');
+    return result.map((json) => UrlEntry.fromJson(json as Map<String, dynamic>)).toList();
   }
 
-  /// Loads pages added by the currently authenticated user.
+  /// Pages added by the signed-in user.
   Future<List<UrlEntry>> loadUserPages() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return [];
 
-    try {
-      final List<dynamic> result = await _supabase
-          .from('pages')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at');
-      return result
-          .map((json) => UrlEntry.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      debugPrint('Error loading user pages: $e');
-      return [];
-    }
+    final List<dynamic> result =
+        await _supabase.from('pages').select('*').eq('user_id', user.id).order('created_at');
+    return result.map((json) => UrlEntry.fromJson(json as Map<String, dynamic>)).toList();
   }
 
-  /// Adds a new page for the authenticated user. Returns `true` on success.
   Future<bool> addUserPage(String url, {String? urlName}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return false;
 
-    try {
-      await _supabase.from('pages').insert({
-        'url': url,
-        'url_name': urlName,
-        'user_id': user.id,
-        'is_public': false,
-      });
-      return true;
-    } catch (e) {
-      debugPrint('Error adding page: $e');
-      return false;
-    }
+    return _write('adding page', () => _supabase.from('pages').insert({
+          'url': url,
+          'url_name': urlName,
+          'user_id': user.id,
+          'is_public': false,
+        }));
   }
 
-  /// Updates a page owned by the authenticated user. Returns `true` on success.
   Future<bool> updateUserPage(String pageId, String newUrl, {String? newUrlName}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return false;
 
-    try {
-      await _supabase
+    return _write(
+      'updating page',
+      () => _supabase
           .from('pages')
           .update({'url': newUrl, 'url_name': newUrlName})
           .eq('id', pageId)
-          .eq('user_id', user.id);
-      return true;
-    } catch (e) {
-      debugPrint('Error updating page: $e');
-      return false;
-    }
+          .eq('user_id', user.id),
+    );
   }
 
-  /// Deletes a page owned by the authenticated user. Returns `true` on success.
   Future<bool> deleteUserPage(String pageId) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return false;
 
-    try {
-      await _supabase.from('pages').delete().eq('id', pageId).eq('user_id', user.id);
-      return true;
-    } catch (e) {
-      debugPrint('Error deleting page: $e');
-      return false;
-    }
+    return _write(
+      'deleting page',
+      () => _supabase.from('pages').delete().eq('id', pageId).eq('user_id', user.id),
+    );
   }
 
   // --- USER SETTINGS ---
 
-  /// Loads settings of the currently authenticated user.
+  /// Settings of the signed-in user, or `null` if they have none yet.
   Future<UserSettings?> loadUserSettings() async {
     final user = _supabase.auth.currentUser;
     if (user == null) return null;
 
-    try {
-      final List<dynamic> result = await _supabase
-          .from('user_settings')
-          .select('*')
-          .eq('user_id', user.id)
-          .limit(1);
-
-      if (result.isNotEmpty) {
-        return UserSettings.fromJson(result.first as Map<String, dynamic>);
-      }
-      return null;
-    } catch (e) {
-      debugPrint('Error loading user settings: $e');
-      return null;
-    }
+    final List<dynamic> result =
+        await _supabase.from('user_settings').select('*').eq('user_id', user.id).limit(1);
+    return result.isEmpty ? null : UserSettings.fromJson(result.first as Map<String, dynamic>);
   }
 
   /// Saves (or clears with `null`) the user's Discord webhook.
   ///
-  /// `is_admin` is intentionally never sent from the client: it is managed in
-  /// the database only, so saving a webhook cannot reset or escalate it.
+  /// `is_admin` is never sent: it is read-only for the app (see schema.sql).
   Future<bool> saveDiscordWebhook(String? discordWebhookUrl) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return false;
 
-    try {
-      await _supabase.from('user_settings').upsert({
+    return _write(
+      'saving Discord webhook',
+      () => _supabase.from('user_settings').upsert({
         'user_id': user.id,
         'discord_webhook_url': discordWebhookUrl,
-      });
-      return true;
-    } catch (e) {
-      debugPrint('Error saving Discord webhook: $e');
-      return false;
-    }
+      }),
+    );
   }
 
   // --- STATUSES ---
 
-  /// Daily statuses of a page for the last 30 days in the given time zone.
-  Future<List<PageStatus>> loadPageDailyStatuses(String pageId,
-      {String timezone = kTimezoneUtc}) async {
-    try {
-      final List<dynamic> result = await _supabase
+  /// Daily history, today's status and the latest check of a page.
+  Future<PageStatusData> loadPageStatus(String pageId, {required String timezone}) async {
+    final today = wallClock(DateTime.now(), timezone);
+    final start = midnightUtc(today.year, today.month, today.day, timezone);
+    final end = midnightUtc(today.year, today.month, today.day + 1, timezone);
+
+    final responses = await Future.wait([
+      _supabase
           .from('page_daily_status')
           .select('status, day, timezone')
           .eq('page_id', pageId)
           .eq('timezone', timezone)
           .order('day', ascending: false)
-          .limit(30);
-
-      return result
-          .map((json) => PageStatus.fromJson(json as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      debugPrint('Error loading daily statuses: $e');
-      return [];
-    }
-  }
-
-  /// Today's status computed from the raw check logs (the daily record for
-  /// today is only written after the day ends).
-  Future<PageStatus?> loadPageLatestStatus(String pageId,
-      {String timezone = kTimezoneUtc}) async {
-    try {
-      final today = wallClock(DateTime.now(), timezone);
-      final start = midnightUtc(today.year, today.month, today.day, timezone);
-      final end = midnightUtc(today.year, today.month, today.day + 1, timezone);
-
-      final List<dynamic> result = await _supabase
+          .limit(30),
+      // The daily record for today is written only after the day ends, so
+      // today's status is computed from the raw logs.
+      _supabase
           .from('pages_logs')
-          .select('status_code, error')
+          .select('status_code, error, checked_at')
           .eq('page_id', pageId)
           .gte('checked_at', start.toIso8601String())
-          .lt('checked_at', end.toIso8601String());
+          .lt('checked_at', end.toIso8601String()),
+      // Latest check of any day, so a check just before midnight still counts.
+      _supabase
+          .from('pages_logs')
+          .select('status_code, error, checked_at')
+          .eq('page_id', pageId)
+          .order('checked_at', ascending: false)
+          .limit(1),
+    ]);
 
-      final failedChecks = result
-          .where((log) => isFailedCheck(
-                statusCode: log['status_code'] as int?,
-                error: log['error'] as String?,
-              ))
-          .length;
+    final daily = (responses[0] as List<dynamic>)
+        .map((json) => PageStatus.fromJson(json as Map<String, dynamic>))
+        .toList();
+    final logs = (responses[1] as List<dynamic>).cast<Map<String, dynamic>>();
+    final latest = (responses[2] as List<dynamic>).cast<Map<String, dynamic>>();
 
-      return PageStatus(
-        status: dailyStatus(checks: result.length, failedChecks: failedChecks),
+    bool failed(Map<String, dynamic> log) =>
+        isFailedCheck(statusCode: log['status_code'] as int?, error: log['error'] as String?);
+
+    return PageStatusData(
+      pageId: pageId,
+      timezone: timezone,
+      daily: daily,
+      today: PageStatus(
+        status: dailyStatus(checks: logs.length, failedChecks: logs.where(failed).length),
         day: dayKey(today),
         timezone: timezone,
-      );
+      ),
+      lastCheck: latest.isEmpty
+          ? null
+          : LastCheck(
+              checkedAt: parseUtc(latest.first['checked_at'] as String),
+              failed: failed(latest.first),
+            ),
+    );
+  }
+
+  Future<bool> _write(String action, Future<dynamic> Function() request) async {
+    try {
+      await request();
+      return true;
     } catch (e) {
-      debugPrint('Error loading latest status from logs: $e');
-      return null;
+      debugPrint('Error $action: $e');
+      return false;
     }
   }
 }
