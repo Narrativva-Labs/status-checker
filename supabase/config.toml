@@ -1,0 +1,10 @@
+# Supabase CLI configuration (used by `supabase functions deploy`).
+project_id = "status-checker"
+
+# Both functions are called by pg_cron with the anon key in the Authorization
+# header (see supabase/schema.sql), so JWT verification stays on.
+[functions.status-checker]
+verify_jwt = true
+
+[functions.update_daily_status]
+verify_jwt = true

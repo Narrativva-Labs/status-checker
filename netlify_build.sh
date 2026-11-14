@@ -1,33 +1,26 @@
 #!/usr/bin/env bash
-set -e
+# Netlify build: installs a pinned Flutter SDK and builds the web app.
+# Required environment variables: SUPABASE_URL, SUPABASE_ANON_KEY, EMAIL_REDIRECT_URL.
+set -euo pipefail
 
-# Install Flutter SDK if not present (NEBO ji vždy přepiš, když složka existuje)
+# Pinned, so a new Flutter release cannot break the deploy unexpectedly.
+FLUTTER_VERSION="${FLUTTER_VERSION:-3.47.9}"
+
 if ! command -v flutter &> /dev/null; then
-  echo "🔄 Installing Flutter SDK (stable)…"
-  # Smaž starou složku, pokud existuje
+  echo "Installing Flutter SDK ${FLUTTER_VERSION}…"
   rm -rf flutter
-  git clone --depth 1 --branch stable https://github.com/flutter/flutter.git
+  git clone --depth 1 --branch "${FLUTTER_VERSION}" https://github.com/flutter/flutter.git
   export PATH="$PATH:$(pwd)/flutter/bin"
 else
-  echo "✅ Flutter already installed"
+  echo "Flutter already installed: $(flutter --version | head -1)"
 fi
 
-# Pokud běžíš build na Netlify, přidej flutter do PATH vždy (i když už je v systému)
-export PATH="$PATH:$(pwd)/flutter/bin"
-
-# Precache web artifacts
 flutter precache --web
+flutter pub get
 
-# Install dependencies
-flutter pub get --no-precompile
+flutter build web --release \
+  --dart-define=EMAIL_REDIRECT_URL="${EMAIL_REDIRECT_URL}" \
+  --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
+  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"
 
-# Generate localization (pokud používáš, jinak smaž)
-flutter gen-l10n || true
-
-# Build Flutter web app (všechny env proměnné se propisují přes --dart-define)
-flutter build web \
-  --dart-define=EMAIL_REDIRECT_URL=$EMAIL_REDIRECT_URL \
-  --dart-define=SUPABASE_URL=$SUPABASE_URL \
-  --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
-
-echo "✅ Flutter web build complete at build/web"
+echo "Flutter web build complete at build/web"

@@ -39,3 +39,6 @@ web/build/
 
 # Firebase / Supabase config (if copied locally)
 supabase/.env
+
+# macOS
+.DS_Store
