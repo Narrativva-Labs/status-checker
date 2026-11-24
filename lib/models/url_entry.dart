@@ -3,6 +3,7 @@ class UrlEntry {
   final String? userId;
   final String url;
   final String? urlName;
+  final String? expectText;
   final bool isPublic;
   final DateTime createdAt;
 
@@ -11,6 +12,7 @@ class UrlEntry {
     this.userId,
     required this.url,
     this.urlName,
+    this.expectText,
     required this.isPublic,
     required this.createdAt,
   });
@@ -24,6 +26,7 @@ class UrlEntry {
       userId: json['user_id'] as String?,
       url: json['url'] as String,
       urlName: json['url_name'] as String?,
+      expectText: json['expect_text'] as String?,
       isPublic: (json['is_public'] as bool?) ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
@@ -35,6 +38,7 @@ class UrlEntry {
       'user_id': userId,
       'url': url,
       'url_name': urlName,
+      'expect_text': expectText == '' ? null : expectText,
       'is_public': isPublic,
       'created_at': createdAt.toIso8601String(),
     };

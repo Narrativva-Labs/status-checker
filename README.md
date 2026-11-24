@@ -14,6 +14,9 @@ built with Flutter web, Supabase (Postgres, Auth, Edge Functions) and Netlify.
 - Passwordless login with a magic link (Supabase Auth).
 - Add, edit and delete your own URLs (up to 10 per user, enforced in the
   database).
+- Optional `expect_text` per page (up to 200 characters): an exact, case-sensitive
+  substring required in the first 64 KiB of the final UTF-8 response. Empty or
+  null keeps status-only checks. The configured value is not displayed publicly.
 - Discord alerts when a site goes down and when it is back up. Before a webhook
   is saved, a one-time code is sent to the channel to confirm the URL works and
   that you can read the channel. Adding, editing and deleting a page also posts
@@ -33,8 +36,9 @@ built with Flutter web, Supabase (Postgres, Auth, Edge Functions) and Netlify.
 
 1. **`status-checker`** runs every 5 minutes. Pages of admin users are checked
    every 5 minutes, all others every 15 minutes. A check fails on a network
-   error, a timeout (10 s) or an HTTP status ≥ 400; redirects are followed hop
-   by hop, and every hop must be a public address. Each result is stored in
+   error, a timeout (10 s, including reading the body), an HTTP status ≥ 400,
+   or a missing `expect_text` substring when configured; redirects are followed
+   hop by hop, and every hop must be a public address. Each result is stored in
    `pages_logs`. When a page changes state, its owner gets a Discord message
    (with up to three delivery attempts that respect `Retry-After`).
 2. **`update_daily_status`** runs once a day. It turns the logs of the last
@@ -86,6 +90,31 @@ functions, and both are covered by unit tests.
    ```
 5. To make a user an admin (5-minute checks), set `is_admin = true` in
    `user_settings`. Public pages are marked with `is_public = true` in `pages`.
+
+### Upgrading an existing database
+
+Before deploying the updated app and functions, run this SQL in the Supabase
+SQL editor. It adds the optional field and owner update permission without
+changing existing RLS policies. Content mismatches are stored as
+`content mismatch` in `pages_logs.error` with the actual HTTP status.
+
+```sql
+alter table public.pages add column if not exists expect_text text null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.pages'::regclass
+      and conname = 'pages_expect_text_length'
+  ) then
+    alter table public.pages add constraint pages_expect_text_length
+      check (char_length(expect_text) <= 200);
+  end if;
+end;
+$$;
+
+grant update (url, url_name, expect_text) on public.pages to authenticated;
+```
 
 ### 2. App
 

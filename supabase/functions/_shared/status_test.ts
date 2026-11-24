@@ -1,7 +1,9 @@
 import {
   canDeletePragueDay,
   closedDays,
+  CONTENT_MISMATCH,
   dailyStatus,
+  failureReason,
   isDiscordWebhook,
   isFailed,
   isPublicHttpUrl,
@@ -241,4 +243,22 @@ Deno.test("Discord retries with injected fetch and no network", async () => {
     attempts: 2,
     delays: [6000],
   });
+});
+
+Deno.test("content mismatch fails daily status and notifies on transitions", () => {
+  const mismatch = { status_code: 200, error: CONTENT_MISMATCH };
+  equal(isFailed(mismatch), true);
+  equal(failureReason(mismatch), "Response does not contain the expected text");
+  equal(failureReason(healthy), null);
+  equal(failureReason(failed), "HTTP 500");
+  equal(failureReason({ status_code: null, error: "timeout" }), "timeout");
+  equal(
+    failureReason({ status_code: null, error: null }),
+    "Missing status code",
+  );
+  equal(dailyStatus([healthy, mismatch]), "orange");
+  equal(dailyStatus(Array(12).fill(mismatch)), "red");
+  equal(notificationState(healthy, mismatch), "down");
+  equal(notificationState(mismatch, mismatch), null);
+  equal(notificationState(mismatch, healthy), "up");
 });

@@ -64,6 +64,16 @@ void main() {
     });
   });
 
+  test('content mismatch fails even with HTTP 200 and has a readable reason', () {
+    expect(isFailedCheck(statusCode: 200, error: kContentMismatch), isTrue);
+    expect(failedCheckReason(statusCode: 200, error: kContentMismatch),
+        'Response does not contain the expected text');
+    expect(failedCheckReason(statusCode: 200), isNull);
+    expect(failedCheckReason(statusCode: 500), 'HTTP 500');
+    expect(failedCheckReason(error: 'timeout'), 'timeout');
+    expect(failedCheckReason(), 'Missing status code');
+  });
+
   group('isFailedCheck', () {
     test('2xx and 3xx responses are healthy', () {
       expect(isFailedCheck(statusCode: 200), isFalse);

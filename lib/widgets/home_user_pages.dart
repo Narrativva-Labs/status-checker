@@ -7,7 +7,7 @@ import 'page_status_row.dart';
 
 class HomeUserPages extends StatelessWidget {
   final List<UrlEntry> userPages;
-  final Future<void> Function(String pageId, String newUrl, String? newUrlName) onEditUrl;
+  final Future<void> Function(String pageId, String newUrl, String? newUrlName, String? expectText) onEditUrl;
   final Future<void> Function(String pageId) onDeleteUrl;
   final String timezone;
 
@@ -22,12 +22,14 @@ class HomeUserPages extends StatelessWidget {
   Future<void> _showEditDialog(BuildContext context, UrlEntry entry) async {
     final editUrlController = TextEditingController(text: entry.url);
     final editUrlNameController = TextEditingController(text: entry.urlName);
+    final expectController = TextEditingController(text: entry.expectText);
 
     await showDialogDisposing<void>(
       context,
-      disposables: [editUrlController, editUrlNameController],
+      disposables: [editUrlController, editUrlNameController, expectController],
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: dialogShape(),
         elevation: 14,
         titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
@@ -57,6 +59,16 @@ class HomeUserPages extends StatelessWidget {
               keyboardType: TextInputType.url,
               decoration: dialogInputDecoration('Page URL'),
             ),
+            const SizedBox(height: 22),
+            TextField(
+              controller: expectController,
+              maxLength: 200,
+              decoration: dialogInputDecoration('Expected text in the response (optional)').copyWith(
+                helperText: 'The check fails if the response does not contain this exact text '
+                    '(case-sensitive, first 64 KiB).',
+                helperMaxLines: 4,
+              ),
+            ),
             const SizedBox(height: 10),
           ],
         ),
@@ -83,10 +95,11 @@ class HomeUserPages extends StatelessWidget {
                   onPressed: () async {
                     final url = editUrlController.text.trim();
                     if (url.isEmpty) return;
+                    final expected = expectController.text;
                     final name = editUrlNameController.text.trim();
                     Navigator.of(dialogContext).pop();
                     // Feedback is shown by the caller.
-                    await onEditUrl(entry.id, url, name.isEmpty ? null : name);
+                    await onEditUrl(entry.id, url, name.isEmpty ? null : name, expected);
                   },
                   child: const Text('Save'),
                 ),

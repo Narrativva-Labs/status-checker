@@ -10,11 +10,14 @@ import {
 } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 import {
+  CONTENT_MISMATCH,
+  failureReason,
   isDiscordWebhook,
   isPublicHttpUrl,
   type LogState,
   notificationState,
 } from "../_shared/status.ts";
+import { matchesExpectedText, readBodyPrefix } from "../_shared/content.ts";
 import { sendDiscordNotification } from "../_shared/discord.ts";
 
 /** How many URLs are fetched in parallel. */
@@ -29,6 +32,7 @@ type Page = {
   user_id: string | null;
   url: string;
   url_name: string | null;
+  expect_text: string | null;
 };
 type Settings = {
   user_id: string;
@@ -43,7 +47,10 @@ type CheckLog = {
 };
 
 /** Fetches the URL (following up to MAX_REDIRECTS redirects) and returns the final status. */
-async function fetchStatus(startUrl: string): Promise<number> {
+async function fetchStatus(
+  startUrl: string,
+  expected: string | null,
+): Promise<LogState> {
   const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   let url = startUrl;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -56,12 +63,26 @@ async function fetchStatus(startUrl: string): Promise<number> {
       signal,
       headers: { "User-Agent": "NarrativvaStatusChecker/1.0" },
     });
-    // Release the connection; the body is not needed.
-    await resp.body?.cancel();
     const location = resp.headers.get("location");
     if (resp.status < 300 || resp.status >= 400 || !location) {
-      return resp.status;
+      if (!expected) {
+        await resp.body?.cancel();
+        return { status_code: resp.status, error: null };
+      }
+      try {
+        const text = await readBodyPrefix(resp.body);
+        return {
+          status_code: resp.status,
+          error: matchesExpectedText(text, expected) ? null : CONTENT_MISMATCH,
+        };
+      } catch (e) {
+        return {
+          status_code: resp.status,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
     }
+    await resp.body?.cancel();
     url = new URL(location, url).toString();
   }
   throw new Error("Too many redirects");
@@ -71,7 +92,7 @@ async function checkUrl(page: Page): Promise<CheckLog> {
   let status_code: number | null = null;
   let error: string | null = null;
   try {
-    status_code = await fetchStatus(page.url);
+    ({ status_code, error } = await fetchStatus(page.url, page.expect_text));
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -124,7 +145,7 @@ serve(async (req) => {
 
   const { data: pages, error: pagesError } = await supabase
     .from("pages")
-    .select("id, user_id, url, url_name");
+    .select("id, user_id, url, url_name, expect_text");
   if (pagesError) {
     return new Response("DB error: " + pagesError.message, { status: 500 });
   }
@@ -199,7 +220,11 @@ serve(async (req) => {
 
     const name = page.url_name ? `${page.url_name} (${page.url})` : page.url;
     const content = state === "down"
-      ? `❗️URL DOWN: ${name} (status: ${log.status_code ?? log.error})`
+      ? `❗️URL DOWN: ${name} (status: ${log.status_code ?? log.error}${
+        log.error === CONTENT_MISMATCH
+          ? `, ${failureReason(log)!.toLowerCase()}`
+          : ""
+      })`
       : `✅ URL BACK UP: ${name} (status: ${log.status_code})`;
     return [sendDiscordNotification(webhook, content)];
   });

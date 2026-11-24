@@ -23,8 +23,9 @@ class PageStatus {
 class LastCheck {
   final DateTime checkedAt; // UTC
   final bool failed;
+  final String? reason;
 
-  const LastCheck({required this.checkedAt, required this.failed});
+  const LastCheck({required this.checkedAt, required this.failed, this.reason});
 }
 
 /// Everything the 30-day status bar of one page needs.
