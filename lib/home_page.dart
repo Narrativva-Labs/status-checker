@@ -104,7 +104,7 @@ class _HomePageState extends State<HomePage> {
     return valid ? url : null;
   }
 
-  Future<void> _addUserUrl(String url, String? urlName) async {
+  Future<void> _addUserUrl(String url, String? urlName, String? expectText) async {
     final finalUrl = _normalizeUrl(url);
     if (finalUrl == null) {
       _showMessage('The entered URL is not valid.');
@@ -119,7 +119,7 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final ok = await supabaseService.addUserPage(finalUrl, urlName: urlName?.trim());
+    final ok = await supabaseService.addUserPage(finalUrl, urlName: urlName?.trim(), expectText: expectText);
     if (!ok) {
       _showMessage('Could not add the page. Please try again.');
       return;
@@ -144,7 +144,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _editUserUrl(String pageId, String newUrl, String? newUrlName) async {
+  Future<void> _editUserUrl(String pageId, String newUrl, String? newUrlName, String? expectText) async {
     final finalUrl = _normalizeUrl(newUrl);
     if (finalUrl == null) {
       _showMessage('The entered URL is not valid.');
@@ -156,7 +156,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     final ok = await supabaseService.updateUserPage(pageId, finalUrl,
-        newUrlName: newUrlName?.trim());
+        newUrlName: newUrlName?.trim(), expectText: expectText);
     if (!ok) {
       _showMessage('Could not update the page. Please try again.');
       return;

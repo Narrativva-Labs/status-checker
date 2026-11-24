@@ -20,6 +20,21 @@ create table if not exists public.pages (
   created_at  timestamptz not null default now()
 );
 
+-- Optional exact substring check, also safe to apply to an existing database.
+alter table public.pages add column if not exists expect_text text null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.pages'::regclass
+      and conname = 'pages_expect_text_length'
+  ) then
+    alter table public.pages add constraint pages_expect_text_length
+      check (char_length(expect_text) <= 200);
+  end if;
+end;
+$$;
+
 -- One row per check. Logs of healthy days are deleted by update_daily_status.
 create table if not exists public.pages_logs (
   id           bigserial primary key,
@@ -102,7 +117,7 @@ create policy "Users delete their own pages"
 
 -- Only the URL and the name can be edited from the app (not is_public / owner).
 revoke update on public.pages from anon, authenticated;
-grant update (url, url_name) on public.pages to authenticated;
+grant update (url, url_name, expect_text) on public.pages to authenticated;
 
 -- Logs and daily statuses: readable for pages the user can see; written only
 -- by the edge functions (service role).

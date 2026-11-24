@@ -39,6 +39,7 @@ final page = UrlEntry(
   url: 'https://example.com',
   urlName: 'Example',
   isPublic: true,
+  expectText: 'private expected value',
   createdAt: DateTime.utc(2026),
 );
 
@@ -58,6 +59,26 @@ void main() {
     expect(find.text('Example'), findsOneWidget);
     expect(find.textContaining('Up · checked'), findsOneWidget);
     expect(find.text('Retry'), findsNothing);
+  });
+
+  testWidgets('shows readable mismatch reason without the expected value', (tester) async {
+    final service = FakeService([(timezone) => PageStatusData(
+      pageId: page.id,
+      timezone: timezone,
+      daily: const [],
+      today: healthy(timezone).today,
+      lastCheck: LastCheck(
+        checkedAt: DateTime.now().toUtc(),
+        failed: true,
+        reason: failedCheckReason(statusCode: 200, error: kContentMismatch),
+      ),
+    )]);
+    await tester.pumpWidget(app(service, kTimezoneUtc));
+    await tester.pump();
+    expect(find.textContaining('Down · checked'), findsOneWidget);
+    expect(find.textContaining('Response does not contain the expected text'), findsOneWidget);
+    expect(find.textContaining(kContentMismatch), findsNothing);
+    expect(find.textContaining(page.expectText!), findsNothing);
   });
 
   testWidgets('shows an error with retry instead of an empty history', (tester) async {

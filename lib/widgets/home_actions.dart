@@ -7,7 +7,7 @@ import '../utils/status_utils.dart';
 import 'dialog_styles.dart';
 
 class HomeActions extends StatelessWidget {
-  final Future<void> Function(String url, String? urlName) onAddUrl;
+  final Future<void> Function(String url, String? urlName, String? expectText) onAddUrl;
   final String? currentWebhookUrl;
   final Future<bool> Function(String? webhookUrl) onSaveDiscordWebhook;
 
@@ -30,11 +30,13 @@ class HomeActions extends StatelessWidget {
   void _showAddPageDialog(BuildContext context) {
     final urlController = TextEditingController();
     final nameController = TextEditingController();
+    final expectController = TextEditingController();
 
     showDialogDisposing<void>(
       context,
-      disposables: [urlController, nameController],
+      disposables: [urlController, nameController, expectController],
       builder: (dialogContext) => AlertDialog(
+        scrollable: true,
         shape: dialogShape(),
         elevation: 14,
         titlePadding: const EdgeInsets.only(top: 32, left: 24, right: 24, bottom: 6),
@@ -64,6 +66,16 @@ class HomeActions extends StatelessWidget {
               keyboardType: TextInputType.url,
               decoration: dialogInputDecoration('Page URL'),
             ),
+            const SizedBox(height: 22),
+            TextField(
+              controller: expectController,
+              maxLength: 200,
+              decoration: dialogInputDecoration('Expected text in the response (optional)').copyWith(
+                helperText: 'The check fails if the response does not contain this exact text '
+                    '(case-sensitive, first 64 KiB).',
+                helperMaxLines: 4,
+              ),
+            ),
             const SizedBox(height: 10),
           ],
         ),
@@ -88,10 +100,11 @@ class HomeActions extends StatelessWidget {
                   onPressed: () async {
                     final url = urlController.text.trim();
                     if (url.isEmpty) return;
+                    final expected = expectController.text;
                     final name = nameController.text.trim();
                     Navigator.of(dialogContext).pop();
                     // Feedback (success or the reason of failure) is shown by the caller.
-                    await onAddUrl(url, name.isEmpty ? null : name);
+                    await onAddUrl(url, name.isEmpty ? null : name, expected);
                   },
                   child: const Text('Add'),
                 ),

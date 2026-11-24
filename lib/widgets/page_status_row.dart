@@ -222,11 +222,15 @@ class _LastCheckLabel extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(
-          '${check.failed ? 'Down' : 'Up'} · checked $time',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+        Flexible(
+          child: Text(
+            '${check.failed ? 'Down' : 'Up'} · checked $time'
+            '${check.failed && check.reason != null ? '\n${check.reason}' : ''}',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
           ),
         ),
       ],

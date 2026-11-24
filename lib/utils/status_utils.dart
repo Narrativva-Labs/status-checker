@@ -82,8 +82,19 @@ List<String> lastDayKeys(DateTime now, String timezone, {int count = 30}) {
   });
 }
 
-/// A check failed when the request threw (no status code / an error message)
-/// or the server answered with an HTTP error (4xx/5xx).
+const String kContentMismatch = 'content mismatch';
+
+/// Human-readable failure reason without exposing the configured text.
+String? failedCheckReason({int? statusCode, String? error}) {
+  if (error == kContentMismatch) return 'Response does not contain the expected text';
+  if (error != null && error.isNotEmpty) return error;
+  if (statusCode == null) return 'Missing status code';
+  return statusCode >= 400 ? 'HTTP $statusCode' : null;
+}
+
+/// A check failed when the request threw (no status code / an error message),
+/// the server answered with an HTTP error (4xx/5xx), or the response content
+/// mismatched the expected text (even with a successful HTTP status).
 bool isFailedCheck({int? statusCode, String? error}) {
   if (error != null && error.isNotEmpty) return true;
   return statusCode == null || statusCode >= 400;

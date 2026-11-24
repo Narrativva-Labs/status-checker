@@ -33,19 +33,20 @@ class SupabaseService {
     return result.map((json) => UrlEntry.fromJson(json as Map<String, dynamic>)).toList();
   }
 
-  Future<bool> addUserPage(String url, {String? urlName}) async {
+  Future<bool> addUserPage(String url, {String? urlName, String? expectText}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return false;
 
     return _write('adding page', () => _supabase.from('pages').insert({
           'url': url,
           'url_name': urlName,
+          'expect_text': expectText == '' ? null : expectText,
           'user_id': user.id,
           'is_public': false,
         }));
   }
 
-  Future<bool> updateUserPage(String pageId, String newUrl, {String? newUrlName}) async {
+  Future<bool> updateUserPage(String pageId, String newUrl, {String? newUrlName, String? expectText}) async {
     final user = _supabase.auth.currentUser;
     if (user == null) return false;
 
@@ -53,7 +54,7 @@ class SupabaseService {
       'updating page',
       () => _supabase
           .from('pages')
-          .update({'url': newUrl, 'url_name': newUrlName})
+          .update({'url': newUrl, 'url_name': newUrlName, 'expect_text': expectText == '' ? null : expectText})
           .eq('id', pageId)
           .eq('user_id', user.id),
     );
@@ -153,6 +154,10 @@ class SupabaseService {
           : LastCheck(
               checkedAt: parseUtc(latest.first['checked_at'] as String),
               failed: failed(latest.first),
+              reason: failedCheckReason(
+                statusCode: latest.first['status_code'] as int?,
+                error: latest.first['error'] as String?,
+              ),
             ),
     );
   }

@@ -12,7 +12,19 @@ export type Day = {
 /** Number of failed checks in one day from which the day is shown as red. */
 export const RED_DAY_FAILED_CHECKS = 12;
 
-/** A check fails on a request error, a missing status code or HTTP >= 400. */
+export const CONTENT_MISMATCH = "content mismatch";
+
+/** Human-readable failure reason, without exposing the configured text. */
+export function failureReason(log: LogState): string | null {
+  if (log.error === CONTENT_MISMATCH) {
+    return "Response does not contain the expected text";
+  }
+  if (log.error) return log.error;
+  if (log.status_code === null) return "Missing status code";
+  return log.status_code >= 400 ? `HTTP ${log.status_code}` : null;
+}
+
+/** A check fails on a request error (including content mismatch), a missing status code or HTTP >= 400. */
 export function isFailed(log: LogState): boolean {
   return !!log.error || log.status_code === null || log.status_code >= 400;
 }

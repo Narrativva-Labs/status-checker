@@ -9,9 +9,9 @@ import 'home_user_pages.dart';
 class HomeContent extends StatelessWidget {
   final List<UrlEntry> publicPages;
   final List<UrlEntry> userPages;
-  final Future<void> Function(String url, String? urlName) onAddUrl;
+  final Future<void> Function(String url, String? urlName, String? expectText) onAddUrl;
   final Future<void> Function(String pageId) onDeleteUrl;
-  final Future<void> Function(String pageId, String newUrl, String? newUrlName) onEditUrl;
+  final Future<void> Function(String pageId, String newUrl, String? newUrlName, String? expectText) onEditUrl;
   final String? currentWebhookUrl;
   final Future<bool> Function(String? webhookUrl) onSaveDiscordWebhook;
   final String timezone;
